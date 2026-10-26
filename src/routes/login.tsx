@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter, createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -62,11 +62,6 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Expired sessions get cleared by the API client; make sure the router
-  // reflects that and the user sees the sign-in prompt.
-  router.options.context.queryClient;
-  // (Query invalidation on session expiry is handled per-page via error states.)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
