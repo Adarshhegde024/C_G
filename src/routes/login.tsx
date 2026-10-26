@@ -1,16 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useRouter, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
-import { completeGoogleSignIn, isGoogleConfigured, startGoogleSignIn, GoogleNotConfiguredError } from "@/api/auth";
+import { startGoogleSignIn, GoogleNotConfiguredError } from "@/api/auth";
 import { useAuth } from "@/auth/AuthProvider";
 import { homeForRole } from "@/auth/roles";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/skeleton";
-import { ApiError, onSessionExpired } from "@/api/client";
+import { ApiError } from "@/api/client";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: ({ context }) => {
