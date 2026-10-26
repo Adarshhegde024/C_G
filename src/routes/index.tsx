@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   ArrowRight,
   CheckCircle2,
@@ -82,12 +82,12 @@ function LandingPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Logo />
           <div className="flex items-center gap-2">
-            <Button variant="ghost" asChild={false} onClick={() => window.location.assign("/login")}>
-              Sign in
-            </Button>
-            <Button variant="accent" onClick={() => window.location.assign("/register")} className="hidden sm:inline-flex">
-              Create your vault
-            </Button>
+            <Link to="/login">
+              <Button variant="ghost">Sign in</Button>
+            </Link>
+            <Link to="/register" className="hidden sm:block">
+              <Button variant="accent">Create your vault</Button>
+            </Link>
           </div>
         </div>
       </header>
