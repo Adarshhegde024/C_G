@@ -17,8 +17,11 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthenticatedCheckInRouteImport } from './routes/_authenticated/check-in'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
+import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedNomineeRouteImport } from './routes/_authenticated/nominee'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRecipientsRouteImport } from './routes/_authenticated/recipients'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -60,14 +63,29 @@ const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedNomineeRoute = AuthenticatedNomineeRouteImport.update({
   id: '/nominee',
   path: '/nominee',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedRecipientsRoute = AuthenticatedRecipientsRouteImport.update({
   id: '/recipients',
   path: '/recipients',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthGoogleCallbackRoute = AuthGoogleCallbackRouteImport.update({
@@ -84,8 +102,11 @@ export interface FileRoutesByFullPath {
   '/check-in': typeof AuthenticatedCheckInRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/history': typeof AuthenticatedHistoryRoute
   '/nominee': typeof AuthenticatedNomineeRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -96,8 +117,11 @@ export interface FileRoutesByTo {
   '/check-in': typeof AuthenticatedCheckInRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/history': typeof AuthenticatedHistoryRoute
   '/nominee': typeof AuthenticatedNomineeRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
@@ -110,8 +134,11 @@ export interface FileRoutesById {
   '/_authenticated/check-in': typeof AuthenticatedCheckInRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
+  '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/nominee': typeof AuthenticatedNomineeRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/recipients': typeof AuthenticatedRecipientsRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
@@ -124,8 +151,11 @@ export interface FileRouteTypes {
     | '/check-in'
     | '/dashboard'
     | '/documents'
+    | '/history'
     | '/nominee'
+    | '/profile'
     | '/recipients'
+    | '/settings'
     | '/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -136,8 +166,11 @@ export interface FileRouteTypes {
     | '/check-in'
     | '/dashboard'
     | '/documents'
+    | '/history'
     | '/nominee'
+    | '/profile'
     | '/recipients'
+    | '/settings'
     | '/auth/google/callback'
   id:
     | '__root__'
@@ -149,8 +182,11 @@ export interface FileRouteTypes {
     | '/_authenticated/check-in'
     | '/_authenticated/dashboard'
     | '/_authenticated/documents'
+    | '/_authenticated/history'
     | '/_authenticated/nominee'
+    | '/_authenticated/profile'
     | '/_authenticated/recipients'
+    | '/_authenticated/settings'
     | '/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
@@ -221,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/history': {
+      id: '/_authenticated/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof AuthenticatedHistoryRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/nominee': {
       id: '/_authenticated/nominee'
       path: '/nominee'
@@ -228,11 +271,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNomineeRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/recipients': {
       id: '/_authenticated/recipients'
       path: '/recipients'
       fullPath: '/recipients'
       preLoaderRoute: typeof AuthenticatedRecipientsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/auth/google/callback': {
@@ -249,16 +306,22 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCheckInRoute: typeof AuthenticatedCheckInRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
+  AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedNomineeRoute: typeof AuthenticatedNomineeRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRecipientsRoute: typeof AuthenticatedRecipientsRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCheckInRoute: AuthenticatedCheckInRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
+  AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedNomineeRoute: AuthenticatedNomineeRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRecipientsRoute: AuthenticatedRecipientsRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
