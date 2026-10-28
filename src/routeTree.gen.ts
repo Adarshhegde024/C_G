@@ -16,6 +16,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
+import { Route as AuthenticatedNomineeRouteImport } from './routes/_authenticated/nominee'
+import { Route as AuthenticatedRecipientsRouteImport } from './routes/_authenticated/recipients'
 import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -52,6 +54,16 @@ const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedNomineeRoute = AuthenticatedNomineeRouteImport.update({
+  id: '/nominee',
+  path: '/nominee',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRecipientsRoute = AuthenticatedRecipientsRouteImport.update({
+  id: '/recipients',
+  path: '/recipients',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthGoogleCallbackRoute = AuthGoogleCallbackRouteImport.update({
   id: '/auth/google/callback',
   path: '/auth/google/callback',
@@ -65,6 +77,8 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/nominee': typeof AuthenticatedNomineeRoute
+  '/recipients': typeof AuthenticatedRecipientsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -74,6 +88,8 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/nominee': typeof AuthenticatedNomineeRoute
+  '/recipients': typeof AuthenticatedRecipientsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
@@ -85,6 +101,8 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
+  '/_authenticated/nominee': typeof AuthenticatedNomineeRoute
+  '/_authenticated/recipients': typeof AuthenticatedRecipientsRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
@@ -96,6 +114,8 @@ export interface FileRouteTypes {
     | '/register'
     | '/dashboard'
     | '/documents'
+    | '/nominee'
+    | '/recipients'
     | '/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -105,6 +125,8 @@ export interface FileRouteTypes {
     | '/register'
     | '/dashboard'
     | '/documents'
+    | '/nominee'
+    | '/recipients'
     | '/auth/google/callback'
   id:
     | '__root__'
@@ -115,6 +137,8 @@ export interface FileRouteTypes {
     | '/register'
     | '/_authenticated/dashboard'
     | '/_authenticated/documents'
+    | '/_authenticated/nominee'
+    | '/_authenticated/recipients'
     | '/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
@@ -178,6 +202,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/nominee': {
+      id: '/_authenticated/nominee'
+      path: '/nominee'
+      fullPath: '/nominee'
+      preLoaderRoute: typeof AuthenticatedNomineeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/recipients': {
+      id: '/_authenticated/recipients'
+      path: '/recipients'
+      fullPath: '/recipients'
+      preLoaderRoute: typeof AuthenticatedRecipientsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/auth/google/callback': {
       id: '/auth/google/callback'
       path: '/auth/google/callback'
@@ -191,11 +229,15 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
+  AuthenticatedNomineeRoute: typeof AuthenticatedNomineeRoute
+  AuthenticatedRecipientsRoute: typeof AuthenticatedRecipientsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
+  AuthenticatedNomineeRoute: AuthenticatedNomineeRoute,
+  AuthenticatedRecipientsRoute: AuthenticatedRecipientsRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
