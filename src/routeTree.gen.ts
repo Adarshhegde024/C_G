@@ -22,6 +22,16 @@ import { Route as AuthenticatedNomineeRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRecipientsRouteImport } from './routes/_authenticated/recipients'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedNomineeCaseRouteImport } from './routes/_authenticated/nominee.case'
+import { Route as AuthenticatedNomineeDashboardRouteImport } from './routes/_authenticated/nominee.dashboard'
+import { Route as AuthenticatedNomineeHistoryRouteImport } from './routes/_authenticated/nominee.history'
+import { Route as AuthenticatedNomineeProfileRouteImport } from './routes/_authenticated/nominee.profile'
+import { Route as AuthenticatedRecipientDashboardRouteImport } from './routes/_authenticated/recipient.dashboard'
+import { Route as AuthenticatedRecipientDocumentsRouteImport } from './routes/_authenticated/recipient.documents'
+import { Route as AuthenticatedRecipientHistoryRouteImport } from './routes/_authenticated/recipient.history'
+import { Route as AuthenticatedRecipientProfileRouteImport } from './routes/_authenticated/recipient.profile'
+import { Route as AuthenticatedReviewerCasesRouteImport } from './routes/_authenticated/reviewer.cases'
+import { Route as AuthenticatedReviewerDashboardRouteImport } from './routes/_authenticated/reviewer.dashboard'
 import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -88,6 +98,66 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedNomineeCaseRoute =
+  AuthenticatedNomineeCaseRouteImport.update({
+    id: '/case',
+    path: '/case',
+    getParentRoute: () => AuthenticatedNomineeRoute,
+  } as any)
+const AuthenticatedNomineeDashboardRoute =
+  AuthenticatedNomineeDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => AuthenticatedNomineeRoute,
+  } as any)
+const AuthenticatedNomineeHistoryRoute =
+  AuthenticatedNomineeHistoryRouteImport.update({
+    id: '/history',
+    path: '/history',
+    getParentRoute: () => AuthenticatedNomineeRoute,
+  } as any)
+const AuthenticatedNomineeProfileRoute =
+  AuthenticatedNomineeProfileRouteImport.update({
+    id: '/profile',
+    path: '/profile',
+    getParentRoute: () => AuthenticatedNomineeRoute,
+  } as any)
+const AuthenticatedRecipientDashboardRoute =
+  AuthenticatedRecipientDashboardRouteImport.update({
+    id: '/recipient/dashboard',
+    path: '/recipient/dashboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedRecipientDocumentsRoute =
+  AuthenticatedRecipientDocumentsRouteImport.update({
+    id: '/recipient/documents',
+    path: '/recipient/documents',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedRecipientHistoryRoute =
+  AuthenticatedRecipientHistoryRouteImport.update({
+    id: '/recipient/history',
+    path: '/recipient/history',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedRecipientProfileRoute =
+  AuthenticatedRecipientProfileRouteImport.update({
+    id: '/recipient/profile',
+    path: '/recipient/profile',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedReviewerCasesRoute =
+  AuthenticatedReviewerCasesRouteImport.update({
+    id: '/reviewer/cases',
+    path: '/reviewer/cases',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedReviewerDashboardRoute =
+  AuthenticatedReviewerDashboardRouteImport.update({
+    id: '/reviewer/dashboard',
+    path: '/reviewer/dashboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthGoogleCallbackRoute = AuthGoogleCallbackRouteImport.update({
   id: '/auth/google/callback',
   path: '/auth/google/callback',
@@ -103,10 +173,20 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/history': typeof AuthenticatedHistoryRoute
-  '/nominee': typeof AuthenticatedNomineeRoute
+  '/nominee': typeof AuthenticatedNomineeRouteWithChildren
   '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/nominee/case': typeof AuthenticatedNomineeCaseRoute
+  '/nominee/dashboard': typeof AuthenticatedNomineeDashboardRoute
+  '/nominee/history': typeof AuthenticatedNomineeHistoryRoute
+  '/nominee/profile': typeof AuthenticatedNomineeProfileRoute
+  '/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
+  '/recipient/documents': typeof AuthenticatedRecipientDocumentsRoute
+  '/recipient/history': typeof AuthenticatedRecipientHistoryRoute
+  '/recipient/profile': typeof AuthenticatedRecipientProfileRoute
+  '/reviewer/cases': typeof AuthenticatedReviewerCasesRoute
+  '/reviewer/dashboard': typeof AuthenticatedReviewerDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -118,10 +198,20 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/history': typeof AuthenticatedHistoryRoute
-  '/nominee': typeof AuthenticatedNomineeRoute
+  '/nominee': typeof AuthenticatedNomineeRouteWithChildren
   '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/nominee/case': typeof AuthenticatedNomineeCaseRoute
+  '/nominee/dashboard': typeof AuthenticatedNomineeDashboardRoute
+  '/nominee/history': typeof AuthenticatedNomineeHistoryRoute
+  '/nominee/profile': typeof AuthenticatedNomineeProfileRoute
+  '/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
+  '/recipient/documents': typeof AuthenticatedRecipientDocumentsRoute
+  '/recipient/history': typeof AuthenticatedRecipientHistoryRoute
+  '/recipient/profile': typeof AuthenticatedRecipientProfileRoute
+  '/reviewer/cases': typeof AuthenticatedReviewerCasesRoute
+  '/reviewer/dashboard': typeof AuthenticatedReviewerDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
@@ -135,10 +225,20 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
-  '/_authenticated/nominee': typeof AuthenticatedNomineeRoute
+  '/_authenticated/nominee': typeof AuthenticatedNomineeRouteWithChildren
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/recipients': typeof AuthenticatedRecipientsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/nominee/case': typeof AuthenticatedNomineeCaseRoute
+  '/_authenticated/nominee/dashboard': typeof AuthenticatedNomineeDashboardRoute
+  '/_authenticated/nominee/history': typeof AuthenticatedNomineeHistoryRoute
+  '/_authenticated/nominee/profile': typeof AuthenticatedNomineeProfileRoute
+  '/_authenticated/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
+  '/_authenticated/recipient/documents': typeof AuthenticatedRecipientDocumentsRoute
+  '/_authenticated/recipient/history': typeof AuthenticatedRecipientHistoryRoute
+  '/_authenticated/recipient/profile': typeof AuthenticatedRecipientProfileRoute
+  '/_authenticated/reviewer/cases': typeof AuthenticatedReviewerCasesRoute
+  '/_authenticated/reviewer/dashboard': typeof AuthenticatedReviewerDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
@@ -156,6 +256,16 @@ export interface FileRouteTypes {
     | '/profile'
     | '/recipients'
     | '/settings'
+    | '/nominee/case'
+    | '/nominee/dashboard'
+    | '/nominee/history'
+    | '/nominee/profile'
+    | '/recipient/dashboard'
+    | '/recipient/documents'
+    | '/recipient/history'
+    | '/recipient/profile'
+    | '/reviewer/cases'
+    | '/reviewer/dashboard'
     | '/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -171,6 +281,16 @@ export interface FileRouteTypes {
     | '/profile'
     | '/recipients'
     | '/settings'
+    | '/nominee/case'
+    | '/nominee/dashboard'
+    | '/nominee/history'
+    | '/nominee/profile'
+    | '/recipient/dashboard'
+    | '/recipient/documents'
+    | '/recipient/history'
+    | '/recipient/profile'
+    | '/reviewer/cases'
+    | '/reviewer/dashboard'
     | '/auth/google/callback'
   id:
     | '__root__'
@@ -187,6 +307,16 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/recipients'
     | '/_authenticated/settings'
+    | '/_authenticated/nominee/case'
+    | '/_authenticated/nominee/dashboard'
+    | '/_authenticated/nominee/history'
+    | '/_authenticated/nominee/profile'
+    | '/_authenticated/recipient/dashboard'
+    | '/_authenticated/recipient/documents'
+    | '/_authenticated/recipient/history'
+    | '/_authenticated/recipient/profile'
+    | '/_authenticated/reviewer/cases'
+    | '/_authenticated/reviewer/dashboard'
     | '/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
@@ -292,6 +422,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/nominee/case': {
+      id: '/_authenticated/nominee/case'
+      path: '/case'
+      fullPath: '/nominee/case'
+      preLoaderRoute: typeof AuthenticatedNomineeCaseRouteImport
+      parentRoute: typeof AuthenticatedNomineeRoute
+    }
+    '/_authenticated/nominee/dashboard': {
+      id: '/_authenticated/nominee/dashboard'
+      path: '/dashboard'
+      fullPath: '/nominee/dashboard'
+      preLoaderRoute: typeof AuthenticatedNomineeDashboardRouteImport
+      parentRoute: typeof AuthenticatedNomineeRoute
+    }
+    '/_authenticated/nominee/history': {
+      id: '/_authenticated/nominee/history'
+      path: '/history'
+      fullPath: '/nominee/history'
+      preLoaderRoute: typeof AuthenticatedNomineeHistoryRouteImport
+      parentRoute: typeof AuthenticatedNomineeRoute
+    }
+    '/_authenticated/nominee/profile': {
+      id: '/_authenticated/nominee/profile'
+      path: '/profile'
+      fullPath: '/nominee/profile'
+      preLoaderRoute: typeof AuthenticatedNomineeProfileRouteImport
+      parentRoute: typeof AuthenticatedNomineeRoute
+    }
+    '/_authenticated/recipient/dashboard': {
+      id: '/_authenticated/recipient/dashboard'
+      path: '/recipient/dashboard'
+      fullPath: '/recipient/dashboard'
+      preLoaderRoute: typeof AuthenticatedRecipientDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/recipient/documents': {
+      id: '/_authenticated/recipient/documents'
+      path: '/recipient/documents'
+      fullPath: '/recipient/documents'
+      preLoaderRoute: typeof AuthenticatedRecipientDocumentsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/recipient/history': {
+      id: '/_authenticated/recipient/history'
+      path: '/recipient/history'
+      fullPath: '/recipient/history'
+      preLoaderRoute: typeof AuthenticatedRecipientHistoryRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/recipient/profile': {
+      id: '/_authenticated/recipient/profile'
+      path: '/recipient/profile'
+      fullPath: '/recipient/profile'
+      preLoaderRoute: typeof AuthenticatedRecipientProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/reviewer/cases': {
+      id: '/_authenticated/reviewer/cases'
+      path: '/reviewer/cases'
+      fullPath: '/reviewer/cases'
+      preLoaderRoute: typeof AuthenticatedReviewerCasesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/reviewer/dashboard': {
+      id: '/_authenticated/reviewer/dashboard'
+      path: '/reviewer/dashboard'
+      fullPath: '/reviewer/dashboard'
+      preLoaderRoute: typeof AuthenticatedReviewerDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/auth/google/callback': {
       id: '/auth/google/callback'
       path: '/auth/google/callback'
@@ -302,15 +502,38 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedNomineeRouteChildren {
+  AuthenticatedNomineeCaseRoute: typeof AuthenticatedNomineeCaseRoute
+  AuthenticatedNomineeDashboardRoute: typeof AuthenticatedNomineeDashboardRoute
+  AuthenticatedNomineeHistoryRoute: typeof AuthenticatedNomineeHistoryRoute
+  AuthenticatedNomineeProfileRoute: typeof AuthenticatedNomineeProfileRoute
+}
+
+const AuthenticatedNomineeRouteChildren: AuthenticatedNomineeRouteChildren = {
+  AuthenticatedNomineeCaseRoute: AuthenticatedNomineeCaseRoute,
+  AuthenticatedNomineeDashboardRoute: AuthenticatedNomineeDashboardRoute,
+  AuthenticatedNomineeHistoryRoute: AuthenticatedNomineeHistoryRoute,
+  AuthenticatedNomineeProfileRoute: AuthenticatedNomineeProfileRoute,
+}
+
+const AuthenticatedNomineeRouteWithChildren =
+  AuthenticatedNomineeRoute._addFileChildren(AuthenticatedNomineeRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedCheckInRoute: typeof AuthenticatedCheckInRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
-  AuthenticatedNomineeRoute: typeof AuthenticatedNomineeRoute
+  AuthenticatedNomineeRoute: typeof AuthenticatedNomineeRouteWithChildren
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRecipientsRoute: typeof AuthenticatedRecipientsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedRecipientDashboardRoute: typeof AuthenticatedRecipientDashboardRoute
+  AuthenticatedRecipientDocumentsRoute: typeof AuthenticatedRecipientDocumentsRoute
+  AuthenticatedRecipientHistoryRoute: typeof AuthenticatedRecipientHistoryRoute
+  AuthenticatedRecipientProfileRoute: typeof AuthenticatedRecipientProfileRoute
+  AuthenticatedReviewerCasesRoute: typeof AuthenticatedReviewerCasesRoute
+  AuthenticatedReviewerDashboardRoute: typeof AuthenticatedReviewerDashboardRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -318,10 +541,16 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
-  AuthenticatedNomineeRoute: AuthenticatedNomineeRoute,
+  AuthenticatedNomineeRoute: AuthenticatedNomineeRouteWithChildren,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRecipientsRoute: AuthenticatedRecipientsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedRecipientDashboardRoute: AuthenticatedRecipientDashboardRoute,
+  AuthenticatedRecipientDocumentsRoute: AuthenticatedRecipientDocumentsRoute,
+  AuthenticatedRecipientHistoryRoute: AuthenticatedRecipientHistoryRoute,
+  AuthenticatedRecipientProfileRoute: AuthenticatedRecipientProfileRoute,
+  AuthenticatedReviewerCasesRoute: AuthenticatedReviewerCasesRoute,
+  AuthenticatedReviewerDashboardRoute: AuthenticatedReviewerDashboardRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
