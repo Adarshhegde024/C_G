@@ -1,17 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { FolderLock, HeartHandshake, Lock, ShieldCheck } from "lucide-react";
 
-import { fetchDashboard } from "@/api/dashboard";
 import { fetchDocuments } from "@/api/documents";
 import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { VaultDocument } from "@/types";
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -22,10 +21,10 @@ function greeting(): string {
 
 export function RecipientDashboard() {
   const { user } = useAuth();
-  const dashboardQuery = useQuery<unknown, ApiError>({ queryKey: ["dashboard"], queryFn: fetchDashboard, retry: 1 });
-  const documentsQuery = useQuery({
+  const documentsQuery = useQuery<VaultDocument[], ApiError>({
     queryKey: ["documents"],
     queryFn: fetchDocuments,
+    retry: 1,
   });
 
   const documents = documentsQuery.data ?? [];
@@ -39,7 +38,7 @@ export function RecipientDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard icon={<FolderLock className="h-4.5 w-4.5" aria-hidden />} label="Documents shared with you" value={documents.length} />
-        <StatCard icon={<ShieldCheck className="h-4.5 w-4.5" aria-hidden />} label="Vault status" value={dashboardQuery.isError || dashboardQuery.isPending ? "—" : "See below"} />
+        <StatCard icon={<ShieldCheck className="h-4.5 w-4.5" aria-hidden />} label="Access" value="Released documents only" />
         <StatCard icon={<HeartHandshake className="h-4.5 w-4.5" aria-hidden />} label="Your role" value="Trusted recipient" />
       </div>
 
@@ -84,12 +83,10 @@ export function RecipientDashboard() {
             <Card key={doc.id} className="card-hover p-5">
               <p className="truncate font-medium">{doc.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">{doc.file_type || "file"}</p>
-              {dashboardQuery.data ? null : null}
             </Card>
           ))}
         </div>
       )}
-      <StatusBadge status="ACTIVE" />
     </>
   );
 }

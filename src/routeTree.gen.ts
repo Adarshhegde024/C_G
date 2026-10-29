@@ -22,6 +22,7 @@ import { Route as AuthenticatedNomineeRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRecipientsRouteImport } from './routes/_authenticated/recipients'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedRecipientDashboardRouteImport } from './routes/_authenticated/recipient.dashboard'
 import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -88,6 +89,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedRecipientDashboardRoute =
+  AuthenticatedRecipientDashboardRouteImport.update({
+    id: '/recipient/dashboard',
+    path: '/recipient/dashboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthGoogleCallbackRoute = AuthGoogleCallbackRouteImport.update({
   id: '/auth/google/callback',
   path: '/auth/google/callback',
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -122,6 +130,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/recipients': typeof AuthenticatedRecipientsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
@@ -139,6 +148,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/recipients': typeof AuthenticatedRecipientsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/recipient/dashboard': typeof AuthenticatedRecipientDashboardRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/recipients'
     | '/settings'
+    | '/recipient/dashboard'
     | '/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/recipients'
     | '/settings'
+    | '/recipient/dashboard'
     | '/auth/google/callback'
   id:
     | '__root__'
@@ -187,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/recipients'
     | '/_authenticated/settings'
+    | '/_authenticated/recipient/dashboard'
     | '/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/recipient/dashboard': {
+      id: '/_authenticated/recipient/dashboard'
+      path: '/recipient/dashboard'
+      fullPath: '/recipient/dashboard'
+      preLoaderRoute: typeof AuthenticatedRecipientDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/auth/google/callback': {
       id: '/auth/google/callback'
       path: '/auth/google/callback'
@@ -311,6 +331,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRecipientsRoute: typeof AuthenticatedRecipientsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedRecipientDashboardRoute: typeof AuthenticatedRecipientDashboardRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -322,6 +343,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRecipientsRoute: AuthenticatedRecipientsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedRecipientDashboardRoute: AuthenticatedRecipientDashboardRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
