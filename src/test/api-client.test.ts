@@ -56,10 +56,13 @@ describe("API client error handling", () => {
 
   it("never leaks raw stack traces in ApiError messages", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Internal Server Error text", { status: 500 })));
-    const error = await apiClient.get("/api/dashboard").catch((err) => err as ApiError);
+    const error = (await apiClient
+      .get("/api/dashboard")
+      .then(() => null)
+      .catch((err) => err)) as ApiError | null;
     expect(error).toBeInstanceOf(ApiError);
-    expect(error.message).toBe("Something went wrong on the server. Please try again.");
-    expect(error.message).not.toContain("Internal");
+    expect(error?.message).toBe("Something went wrong on the server. Please try again.");
+    expect(error?.message).not.toContain("Internal");
   });
 });
 
