@@ -5,7 +5,7 @@ export function fetchDocuments(query?: { search?: string }): Promise<VaultDocume
   return apiClient.get<VaultDocument[]>("/api/documents", { query: query ? { search: query.search } : undefined });
 }
 
-export function uploadDocument(file: File, recipientId?: string): Promise<VaultDocument> {
+export function uploadDocument(file: File, recipientId?: string | undefined): Promise<VaultDocument> {
   const formData = new FormData();
   formData.append("file", file);
   if (recipientId) formData.append("recipient_id", recipientId);

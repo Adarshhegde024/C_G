@@ -15,9 +15,9 @@ export function DialogContent({
   description,
 }: {
   children: ReactNode;
-  className?: string;
-  title: string;
-  description?: string;
+  className?: string | undefined;
+  title?: string | undefined;
+  description?: string | undefined;
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -28,12 +28,16 @@ export function DialogContent({
           className,
         )}
       >
-        <DialogPrimitive.Title className="font-display text-lg font-semibold">{title}</DialogPrimitive.Title>
+        <DialogPrimitive.Title className={cn("font-display text-lg font-semibold", !title && "sr-only")}>
+          {title ?? "Dialog"}
+        </DialogPrimitive.Title>
         {description ? (
           <DialogPrimitive.Description className="mt-1 text-sm text-muted-foreground">
             {description}
           </DialogPrimitive.Description>
-        ) : null}
+        ) : (
+          <DialogPrimitive.Description className="sr-only">Dialog</DialogPrimitive.Description>
+        )}
         <div className="mt-4">{children}</div>
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-ring">
           <X className="h-4 w-4" aria-hidden />

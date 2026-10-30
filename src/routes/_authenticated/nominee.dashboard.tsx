@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { Briefcase, HeartPulse, Info, ShieldCheck } from "lucide-react";
+import { Briefcase, HeartPulse, Info } from "lucide-react";
 
 import { fetchNomineeCase } from "@/api/nominee";
 import { ApiError } from "@/api/client";
@@ -118,7 +118,6 @@ export function NomineeDashboardPage() {
         </Card>
       )}
 
-      <ShieldCheck className="sr-only" />
     </>
   );
 }

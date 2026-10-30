@@ -15,7 +15,7 @@ import type { VaultDocument } from "@/types";
 
 export function RecipientDocuments() {
   const [search, setSearch] = useState("");
-  const query = useQuery<VaultDocument[], ApiError>({ queryKey: ["documents"], queryFn: fetchDocuments, retry: 1 });
+  const query = useQuery<VaultDocument[], ApiError>({ queryKey: ["documents"], queryFn: () => fetchDocuments(), retry: 1 });
 
   const documents = useMemo(() => {
     const items = query.data ?? [];

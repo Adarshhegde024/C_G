@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter, useNavigate } from "@tanstack/react-router";
 import {
   Camera,
@@ -59,7 +59,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
-function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: (() => void) | undefined }) {
   return (
     <nav aria-label="Primary" className="flex flex-col gap-1">
       {items.map((item) => (
@@ -126,7 +126,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
   const items = user ? NAV_BY_ROLE[user.role] ?? [] : [];

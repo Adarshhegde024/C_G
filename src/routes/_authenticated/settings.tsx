@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bell, CheckCircle2, LogOut, Timer } from "lucide-react";
 
-import { fetchProfile, updateSecuritySettings } from "@/api/profile";
+import { fetchProfile, updateSecuritySettings, type ProfileDetails } from "@/api/profile";
 import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -123,7 +123,7 @@ function SettingsPage() {
   const [grace, setGrace] = useState<DurationValue>({ value: 72, unit: "hours" });
   const [prefs, setPrefs] = useState(readPrefs);
 
-  const query = useQuery<{ check_in_frequency?: DurationValue; grace_period?: DurationValue }, ApiError>({
+  const query = useQuery<ProfileDetails & { check_in_frequency?: DurationValue; grace_period?: DurationValue }, ApiError>({
     queryKey: ["profile"],
     queryFn: fetchProfile,
   });

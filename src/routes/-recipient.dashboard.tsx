@@ -23,7 +23,7 @@ export function RecipientDashboard() {
   const { user } = useAuth();
   const documentsQuery = useQuery<VaultDocument[], ApiError>({
     queryKey: ["documents"],
-    queryFn: fetchDocuments,
+    queryFn: () => fetchDocuments(),
     retry: 1,
   });
 
