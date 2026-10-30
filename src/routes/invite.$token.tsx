@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 
@@ -12,8 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PageLoader, Spinner } from "@/components/ui/skeleton";
-import { useNavigate } from "@tanstack/react-router";
-import { useRouter } from "@tanstack/react-router";
 import type { AuthUser, Role } from "@/types";
 
 export const Route = createFileRoute("/invite/$token")({

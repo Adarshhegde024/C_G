@@ -7,9 +7,8 @@ import { ArrowLeft, CheckCircle2, FileText, Gavel, MessageSquarePlus, Scale, XCi
 import { approveCase, fetchReviewerCase, rejectCase, requestMoreInfo } from "@/api/reviewer";
 import { ApiError } from "@/api/client";
 import { roleGuard } from "@/auth/roles";
-import { CaseStatusBadge } from "./reviewer.dashboard";
+import { CaseStatusBadge } from "@/components/reviewer/CaseStatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
@@ -254,7 +253,6 @@ function ReviewerCaseDetailPage() {
           </CardContent>
         </Card>
       ) : null}
-      <Badge className="sr-only" />
     </>
   );
 }

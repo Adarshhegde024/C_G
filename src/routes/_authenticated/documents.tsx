@@ -3,7 +3,6 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowUpDown,
   Calendar,
   CloudUpload,
   FileText,
@@ -491,7 +490,6 @@ function DocumentsPage() {
           ))}
         </div>
       )}
-      <ArrowUpDown className="sr-only" />
     </>
   );
 }

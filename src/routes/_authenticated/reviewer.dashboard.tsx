@@ -7,8 +7,8 @@ import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { roleGuard } from "@/auth/roles";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { CaseStatusBadge } from "@/components/reviewer/CaseStatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -33,18 +33,6 @@ export const Route = createFileRoute("/_authenticated/reviewer/dashboard")({
   }),
   component: ReviewerDashboardPage,
 });
-
-export const CASE_STATUS_BADGE: Record<string, { label: string; variant: BadgeProps["variant"] }> = {
-  PENDING: { label: "Pending", variant: "warning" },
-  APPROVED: { label: "Approved", variant: "success" },
-  REJECTED: { label: "Rejected", variant: "destructive" },
-  MORE_INFO_REQUESTED: { label: "More information requested", variant: "secondary" },
-};
-
-export function CaseStatusBadge({ status }: { status: string }) {
-  const meta = CASE_STATUS_BADGE[String(status).toUpperCase()] ?? { label: status.replace(/_/g, " "), variant: "secondary" as const };
-  return <Badge variant={meta.variant}>{meta.label}</Badge>;
-}
 
 function ReviewerDashboardPage() {
   const { user } = useAuth();

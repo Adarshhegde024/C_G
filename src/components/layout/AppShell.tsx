@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter, useNavigate } from "@tanstack/react-router";
 import {
   Camera,
@@ -126,7 +126,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
   const items = user ? NAV_BY_ROLE[user.role] ?? [] : [];
