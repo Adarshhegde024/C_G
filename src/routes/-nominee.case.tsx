@@ -29,7 +29,7 @@ export function NomineeCasePage() {
 
   const query = useQuery<NomineeCase, ApiError>({ queryKey: ["nominee-case"], queryFn: fetchNomineeCase, retry: 1 });
 
-  const submitMutation = useMutation<NomineeCase, ApiError, { file: File; note?: string }>({
+  const submitMutation = useMutation<NomineeCase, ApiError, { file: File; note?: string | undefined }>({
     mutationFn: ({ file: evidence, note: submissionNote }) => submitNomineeEvidence(evidence, submissionNote),
     onSuccess: () => {
       toast.success("Evidence submitted. The backend will analyse it and a human reviewer will decide the case.");

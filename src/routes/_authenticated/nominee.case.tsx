@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { roleGuard } from "@/auth/roles";
-import { NomineeCasePage } from "./-nominee.case";
+import { NomineeCasePage } from "../-nominee.case";
 
 export const Route = createFileRoute("/_authenticated/nominee/case")({
   beforeLoad: ({ context, location }) => {

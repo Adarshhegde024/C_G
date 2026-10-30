@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { roleGuard } from "@/auth/roles";
 
-import { RecipientDashboard } from "./-recipient.dashboard";
+import { RecipientDashboard } from "../-recipient.dashboard";
 
 export const Route = createFileRoute("/_authenticated/recipient/dashboard")({
   beforeLoad: ({ context, location }) => {
