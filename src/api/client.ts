@@ -4,7 +4,7 @@
 // environment variables without touching application code. All API modules
 // route their requests through this client.
 
-const BASE_URL = (import.meta.env.VITE_API_URL ?? "").toString().replace(/\/+$/, "");
+const BASE_URL = (import.meta.env["VITE_API_URL"] ?? "").toString().replace(/\/+$/, "");
 
 const TOKEN_STORAGE_KEY = "cloudguard.session.token";
 
@@ -63,20 +63,20 @@ export function setToken(token: string | null): void {
 
 function extractBackendMessage(body: unknown): string | null {
   if (body && typeof body === "object") {
-    const detail = (body as Record<string, unknown>).detail;
+    const detail = (body as Record<string, unknown>)["detail"];
     if (typeof detail === "string" && detail.length > 0) return detail;
-    const message = (body as Record<string, unknown>).message;
+    const message = (body as Record<string, unknown>)["message"];
     if (typeof message === "string" && message.length > 0) return message;
   }
   return null;
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | undefined;
   body?: unknown;
-  formData?: FormData;
-  query?: Record<string, string | number | undefined>;
-  signal?: AbortSignal;
+  formData?: FormData | undefined;
+  query?: Record<string, string | number | undefined> | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -91,17 +91,17 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const headers: Record<string, string> = {};
   const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
+
+  const init: RequestInit = { method, headers };
+  if (formData !== undefined) init.body = formData;
+  else if (body !== undefined) init.body = JSON.stringify(body);
+  if (signal !== undefined) init.signal = signal;
 
   let response: Response;
   try {
-    response = await fetch(url.toString(), {
-      method,
-      headers,
-      body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
-      signal,
-    });
+    response = await fetch(url.toString(), init);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "CloudGuard is temporarily unable to reach the server. Please try again.");
@@ -144,7 +144,7 @@ export const apiClient = {
     request<T>(path, { ...options, method: "DELETE" }),
 };
 
-export function buildFileFormData(file: Blob | File, fieldName: string, fileName?: string): FormData {
+export function buildFileFormData(file: Blob | File, fieldName: string, fileName?: string | undefined): FormData {
   const formData = new FormData();
   formData.append(fieldName, file, fileName ?? (file instanceof File ? file.name : "upload"));
   return formData;

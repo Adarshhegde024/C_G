@@ -66,7 +66,7 @@ export async function resetPassword(token: string, password: string): Promise<vo
 // authorization endpoint. The backend exchanges the returned authorization
 // code for tokens; the frontend never holds a client secret.
 
-const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").toString();
+const GOOGLE_CLIENT_ID = (import.meta.env["VITE_GOOGLE_CLIENT_ID"] ?? "").toString();
 
 export class GoogleNotConfiguredError extends Error {
   constructor() {

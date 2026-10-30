@@ -6,7 +6,7 @@ interface StatCardProps {
   icon: ReactNode;
   label: string;
   value: ReactNode;
-  hint?: string;
+  hint?: string | undefined;
 }
 
 export function StatCard({ icon, label, value, hint }: StatCardProps) {

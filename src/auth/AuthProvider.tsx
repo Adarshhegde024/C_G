@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useSyncExternalStore, type ReactN
 import { getToken } from "@/api/client";
 import { fetchCurrentUser, login as loginRequest, logout as logoutRequest } from "@/api/auth";
 import { authStore, type AuthState } from "./authStore";
+import type { AuthUser } from "@/types";
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<AuthUser>;

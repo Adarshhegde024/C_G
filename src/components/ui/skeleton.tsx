@@ -1,8 +1,13 @@
+import { forwardRef, type HTMLAttributes } from "react";
+
 import { cn } from "@/lib/utils";
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
-}
+export const Skeleton = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function Skeleton(
+  { className, ...props },
+  ref,
+) {
+  return <div ref={ref} className={cn("animate-pulse rounded-lg bg-muted", className)} {...props} />;
+});
 
 export function Spinner({ className }: { className?: string }) {
   return (

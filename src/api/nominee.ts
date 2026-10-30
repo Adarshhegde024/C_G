@@ -29,7 +29,7 @@ export function fetchNomineeCase(): Promise<NomineeCase> {
   return apiClient.get<NomineeCase>("/api/nominee/case");
 }
 
-export function submitNomineeEvidence(file: File, note?: string): Promise<NomineeCase> {
+export function submitNomineeEvidence(file: File, note?: string | undefined): Promise<NomineeCase> {
   const formData = new FormData();
   formData.append("file", file);
   if (note) formData.append("note", note);

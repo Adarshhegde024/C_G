@@ -351,7 +351,7 @@ function DocumentsPage() {
   const [sort, setSort] = useState<SortKey>("newest");
   const [filter, setFilter] = useState<"all" | "released" | "assigned">("all");
 
-  const query = useQuery<VaultDocument[], ApiError>({ queryKey: ["documents"], queryFn: fetchDocuments });
+  const query = useQuery<VaultDocument[], ApiError>({ queryKey: ["documents"], queryFn: () => fetchDocuments() });
 
   const documents = useMemo(() => {
     let items = query.data ?? [];

@@ -12,6 +12,6 @@ export function fetchInvitation(token: string) {
   }>(`/api/invite/${token}`);
 }
 
-export function acceptInvitation(token: string, password?: string) {
+export function acceptInvitation(token: string, password?: string | undefined) {
   return apiClient.post<{ token?: string; user?: AuthUser }>(`/api/invite/${token}/accept`, { password });
 }

@@ -59,7 +59,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
-function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: (() => void) | undefined }) {
   return (
     <nav aria-label="Primary" className="flex flex-col gap-1">
       {items.map((item) => (
