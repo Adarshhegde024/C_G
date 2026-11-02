@@ -43,8 +43,13 @@ def build_reviewer_case(case_data: dict) -> ReviewerCase:
     owner_dob = owner_profile.get("date_of_birth")
 
     # Load nominee profile
-    nom_res = supabase.table("nominees").select("*").eq("id", case_data["nominee_id"]).limit(1).execute()
-    nominee = nom_res.data[0] if nom_res.data else {}
+    nominee = {}
+    try:
+        nom_res = supabase.table("nominees").select("*").eq("id", case_data["nominee_id"]).limit(1).execute()
+        if nom_res.data:
+            nominee = nom_res.data[0]
+    except Exception:
+        pass
     nominee_name = nominee.get("name") or "Nominee"
     nominee_email = nominee.get("email") or "—"
 
@@ -55,6 +60,9 @@ def build_reviewer_case(case_data: dict) -> ReviewerCase:
             id=str(e["id"]),
             file_name=e["file_name"],
             file_type=e.get("file_type", "document"),
+            category=e.get("category", "DEATH_CERTIFICATE"),
+            document_number=e.get("document_number"),
+            issuing_authority=e.get("issuing_authority"),
             uploaded_at=e["uploaded_at"],
             size_bytes=e.get("size_bytes"),
             download_url=f"/api/reviewer/evidence/{e['id']}/download",
@@ -63,11 +71,20 @@ def build_reviewer_case(case_data: dict) -> ReviewerCase:
     ]
 
     # Load audit history
-    rev_res = supabase.table("case_reviews").select("*").eq("case_id", case_id).order("created_at", desc=True).execute()
+    rev_data = []
+    try:
+        rev_res = supabase.table("case_reviews").select("*").eq("case_id", case_id).order("created_at", desc=True).execute()
+        if rev_res.data:
+            rev_data = rev_res.data
+    except Exception:
+        pass
+
     audit_history = [
         {"timestamp": case_data.get("created_at"), "event": "CASE_OPENED", "description": "Verification case initiated"}
     ]
-    for r in (rev_res.data or []):
+    if case_data.get("claim_reason"):
+        audit_history.append({"timestamp": case_data.get("updated_at") or case_data.get("created_at"), "event": "CLAIM_FILED", "description": f"Claim filed: {case_data.get('claim_reason')}"})
+    for r in rev_data:
         audit_history.append({
             "timestamp": r["created_at"],
             "event": f"REVIEWER_{r['action']}",
@@ -83,6 +100,10 @@ def build_reviewer_case(case_data: dict) -> ReviewerCase:
         owner_dob=owner_dob,
         nominee_name=nominee_name,
         nominee_email=nominee_email,
+        claim_reason=case_data.get("claim_reason"),
+        incident_date=case_data.get("incident_date"),
+        jurisdiction=case_data.get("jurisdiction"),
+        declaration_confirmed=case_data.get("declaration_confirmed", False),
         note=case_data.get("note"),
         evidence=evidence_list,
         ocr=case_data.get("ocr_result"),

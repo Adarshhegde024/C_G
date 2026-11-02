@@ -27,6 +27,7 @@ import { ApiError } from "@/api/client";
 import { roleGuard } from "@/auth/roles";
 import { CaseStatusBadge } from "@/components/reviewer/CaseStatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -166,8 +167,8 @@ function ReviewerCaseDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Parties</CardTitle>
-            <CardDescription>Identity information as provided to the backend.</CardDescription>
+            <CardTitle>Parties & Claim Grounds</CardTitle>
+            <CardDescription>Identity and claim grounds provided by the nominee.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div>
@@ -181,8 +182,25 @@ function ReviewerCaseDetailPage() {
               <p className="mt-0.5 font-medium">{reviewCase.nominee_name ?? "—"}</p>
               <p className="text-muted-foreground">{reviewCase.nominee_email ?? "—"}</p>
             </div>
+
+            {reviewCase.claim_reason ? (
+              <div className="rounded-lg border border-border/80 bg-secondary/30 p-3 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Claim Grounds</p>
+                <p className="font-medium text-foreground">{reviewCase.claim_reason.replace(/_/g, " ")}</p>
+                {reviewCase.incident_date && <p className="text-xs text-muted-foreground">Incident Date: {reviewCase.incident_date}</p>}
+                {reviewCase.jurisdiction && <p className="text-xs text-muted-foreground">Jurisdiction: {reviewCase.jurisdiction}</p>}
+                {reviewCase.declaration_confirmed && (
+                  <div className="flex items-center gap-1 text-xs text-success font-medium pt-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Nominee Declaration Signed
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             {reviewCase.note ? (
-              <div className="rounded-lg bg-secondary px-3 py-2 text-secondary-foreground">Nominee note: {reviewCase.note}</div>
+              <div className="rounded-lg bg-secondary px-3 py-2 text-secondary-foreground text-xs">
+                <strong>Nominee statement:</strong> {reviewCase.note}
+              </div>
             ) : null}
           </CardContent>
         </Card>
@@ -220,7 +238,7 @@ function ReviewerCaseDetailPage() {
             Submitted evidence
           </CardTitle>
           <CardDescription>
-            Official documents submitted by the nominee for legacy verification (e.g. Death Certificate, Medical Records).
+            Official documents submitted by the nominee for legacy verification (e.g. Death Certificate, Nominee ID, Medical Records).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -236,11 +254,20 @@ function ReviewerCaseDetailPage() {
                       <FileText className="h-5 w-5 text-lavender" aria-hidden />
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{item.file_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Uploaded {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                        {item.size_bytes ? ` · ${(item.size_bytes / 1024).toFixed(1)} KB` : ""}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="truncate text-sm font-medium">{item.file_name}</p>
+                        {item.category && (
+                          <Badge variant="lavender" className="text-[10px] py-0 px-2">
+                            {item.category.replace(/_/g, " ")}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        <span>Uploaded {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>
+                        {item.size_bytes ? <span>· {(item.size_bytes / 1024).toFixed(1)} KB</span> : null}
+                        {item.document_number && <span>· Doc #: {item.document_number}</span>}
+                        {item.issuing_authority && <span>· Authority: {item.issuing_authority}</span>}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

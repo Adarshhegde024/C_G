@@ -17,6 +17,7 @@ from app.models.schemas import (
     SaveNomineePayload,
     NomineeCase,
     EvidenceItem,
+    InitiateClaimPayload,
 )
 from app.database import (
     get_supabase,
@@ -30,6 +31,7 @@ from app.database import (
     update_legacy_case,
     update_profile,
     save_legacy_case,
+    get_legacy_case_for_nominee,
 )
 from app.services.audit import record_audit
 from app.services.ocr import analyze_evidence_document
@@ -186,13 +188,13 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
     nominee_id = nominee_rec["id"]
     owner_id = nominee_rec["owner_id"]
 
-    # Retrieve case
-    case_res = supabase.table("legacy_cases").select("*").eq("nominee_id", nominee_id).limit(1).execute()
+    # Retrieve case (in-memory cache first)
+    case_data = get_legacy_case_for_nominee(nominee_id)
     
     owner_profile = get_profile_by_id(owner_id) or {}
     owner_name = owner_profile.get("full_name") or "Vault Owner"
 
-    if not case_res.data:
+    if not case_data:
         # Auto-create case in ELIGIBLE state if account has entered case status
         case_id = str(uuid.uuid4())
         new_case = {
@@ -202,13 +204,7 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
             "status": "ELIGIBLE",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        try:
-            supabase.table("legacy_cases").insert(new_case).execute()
-            case_data = new_case
-        except Exception:
-            raise HTTPException(status_code=404, detail="No verification case is open right now.")
-    else:
-        case_data = case_res.data[0]
+        case_data = save_legacy_case(new_case)
 
     case_id = str(case_data["id"])
 
@@ -219,6 +215,9 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
             id=str(e["id"]),
             file_name=e["file_name"],
             file_type=e.get("file_type", "document"),
+            category=e.get("category", "DEATH_CERTIFICATE"),
+            document_number=e.get("document_number"),
+            issuing_authority=e.get("issuing_authority"),
             uploaded_at=e["uploaded_at"],
             size_bytes=e.get("size_bytes"),
             download_url=f"/api/reviewer/evidence/{e['id']}/download",
@@ -230,6 +229,8 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
     audit_history = [
         {"timestamp": case_data.get("created_at"), "event": "CASE_OPENED", "description": "Verification case initiated"}
     ]
+    if case_data.get("claim_reason"):
+        audit_history.append({"timestamp": case_data.get("updated_at") or case_data.get("created_at"), "event": "CLAIM_FILED", "description": f"Claim reason: {case_data.get('claim_reason')}"})
     if case_data.get("status") in ["EVIDENCE_SUBMITTED", "AWAITING_REVIEW"]:
         audit_history.append({"timestamp": datetime.now(timezone.utc).isoformat(), "event": "EVIDENCE_UPLOADED", "description": "Nominee submitted evidence"})
 
@@ -239,6 +240,10 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
         created_at=case_data.get("created_at"),
         owner_name=owner_name,
         nominee_name=nominee_rec.get("name"),
+        claim_reason=case_data.get("claim_reason"),
+        incident_date=case_data.get("incident_date"),
+        jurisdiction=case_data.get("jurisdiction"),
+        declaration_confirmed=case_data.get("declaration_confirmed", False),
         note=case_data.get("note"),
         evidence=evidence_list,
         ocr=case_data.get("ocr_result"),
@@ -246,14 +251,112 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
     )
 
 
+@router.post("/case/claim", response_model=NomineeCase)
+async def initiate_nominee_claim(
+    payload: InitiateClaimPayload,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """
+    Submits or updates claim initiation details (reason, incident date, jurisdiction, legal declaration).
+    """
+    supabase = get_supabase()
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No verification case is open for you.")
+    
+    owner_id = nominee_rec["owner_id"]
+    owner_profile = get_profile_by_id(owner_id) or {}
+    owner_name = owner_profile.get("full_name") or "Vault Owner"
+    
+    case_data = get_legacy_case_for_nominee(nominee_rec["id"])
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    if not case_data:
+        case_id = str(uuid.uuid4())
+        case_data = {
+            "id": case_id,
+            "owner_id": owner_id,
+            "nominee_id": nominee_rec["id"],
+            "status": "CLAIM_FILED",
+            "claim_reason": payload.claim_reason,
+            "incident_date": payload.incident_date,
+            "jurisdiction": payload.jurisdiction,
+            "declaration_confirmed": payload.declaration_confirmed,
+            "note": payload.note,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        save_legacy_case(case_data)
+    else:
+        case_id = str(case_data["id"])
+        current_st = case_data.get("status", "ELIGIBLE")
+        new_status = "CLAIM_FILED" if current_st == "ELIGIBLE" else current_st
+        patch = {
+            "claim_reason": payload.claim_reason,
+            "incident_date": payload.incident_date,
+            "jurisdiction": payload.jurisdiction,
+            "declaration_confirmed": payload.declaration_confirmed,
+            "note": payload.note or case_data.get("note"),
+            "status": new_status,
+            "updated_at": now_iso,
+        }
+        update_legacy_case(case_id, patch)
+        case_data.update(patch)
+
+    record_audit(
+        current_user.id,
+        "CLAIM_INITIATED",
+        f"Claim filed under {payload.claim_reason} (Incident date: {payload.incident_date or 'N/A'})",
+        "SUCCESS"
+    )
+
+    ev_res = get_case_evidence_for_case(case_id)
+    evidence_list = [
+        EvidenceItem(
+            id=str(e["id"]),
+            file_name=e["file_name"],
+            file_type=e.get("file_type", "document"),
+            category=e.get("category", "DEATH_CERTIFICATE"),
+            document_number=e.get("document_number"),
+            issuing_authority=e.get("issuing_authority"),
+            uploaded_at=e["uploaded_at"],
+            size_bytes=e.get("size_bytes"),
+            download_url=f"/api/reviewer/evidence/{e['id']}/download",
+        )
+        for e in ev_res
+    ]
+
+    return NomineeCase(
+        id=case_id,
+        status=case_data.get("status", "CLAIM_FILED"),
+        created_at=case_data.get("created_at"),
+        owner_name=owner_name,
+        nominee_name=nominee_rec.get("name"),
+        claim_reason=case_data.get("claim_reason"),
+        incident_date=case_data.get("incident_date"),
+        jurisdiction=case_data.get("jurisdiction"),
+        declaration_confirmed=case_data.get("declaration_confirmed", True),
+        note=case_data.get("note"),
+        evidence=evidence_list,
+        ocr=case_data.get("ocr_result"),
+        audit_history=[
+            {"timestamp": case_data.get("created_at"), "event": "CASE_OPENED", "description": "Verification case initiated"},
+            {"timestamp": now_iso, "event": "CLAIM_FILED", "description": f"Nominee initiated claim: {payload.claim_reason}"}
+        ],
+    )
+
+
 @router.post("/case/evidence", response_model=NomineeCase)
 async def submit_case_evidence(
     file: UploadFile = File(...),
+    category: str = Form("DEATH_CERTIFICATE"),
+    document_number: Optional[str] = Form(None),
+    issuing_authority: Optional[str] = Form(None),
     note: Optional[str] = Form(None),
     current_user: AuthUser = Depends(get_current_user),
 ):
     """
-    Accepts evidence file upload, executes server-side OCR analysis,
+    Accepts categorized evidence file upload, executes server-side OCR analysis,
     and updates the verification case to EVIDENCE_SUBMITTED / AWAITING_REVIEW.
     """
     supabase = get_supabase()
@@ -267,15 +370,8 @@ async def submit_case_evidence(
     owner_name = owner_profile.get("full_name") or "Vault Owner"
     owner_dob = owner_profile.get("date_of_birth")
 
-    # Find or initialize case
-    case_res_data = None
-    try:
-        case_res = supabase.table("legacy_cases").select("*").eq("nominee_id", nominee_rec["id"]).limit(1).execute()
-        if case_res.data:
-            case_res_data = case_res.data[0]
-    except Exception as e:
-        logger.debug(f"Fetch legacy case: {e}")
-
+    # Find or initialize case (cache-first)
+    case_res_data = get_legacy_case_for_nominee(nominee_rec["id"])
     if not case_res_data:
         case_id = str(uuid.uuid4())
         case_entry = {
@@ -286,6 +382,7 @@ async def submit_case_evidence(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         save_legacy_case(case_entry)
+        case_res_data = case_entry
     else:
         case_id = str(case_res_data["id"])
 
@@ -306,15 +403,19 @@ async def submit_case_evidence(
     except Exception as e:
         logger.warning(f"Could not write local evidence storage file: {e}")
 
-    try:
-        supabase = get_supabase()
-        supabase.storage.from_("evidence-files").upload(
-            path=storage_path,
-            file=file_bytes,
-            file_options={"content-type": file.content_type or "application/octet-stream"}
-        )
-    except Exception as e:
-        logger.debug(f"Warning: Storage upload to evidence-files: {e}")
+    def _async_storage_upload():
+        try:
+            supabase = get_supabase()
+            supabase.storage.from_("evidence-files").upload(
+                path=storage_path,
+                file=file_bytes,
+                file_options={"content-type": file.content_type or "application/octet-stream"}
+            )
+        except Exception as e:
+            logger.debug(f"Warning: Storage upload to evidence-files: {e}")
+
+    from app.database import _db_executor
+    _db_executor.submit(_async_storage_upload)
 
     # Record evidence row in memory cache and Supabase
     ev_entry = {
@@ -322,6 +423,9 @@ async def submit_case_evidence(
         "case_id": case_id,
         "file_name": safe_filename,
         "file_type": file.content_type or "document",
+        "category": category,
+        "document_number": document_number.strip() if document_number else None,
+        "issuing_authority": issuing_authority.strip() if issuing_authority else None,
         "size_bytes": len(file_bytes),
         "storage_path": storage_path,
         "local_path": local_file_path,
@@ -340,16 +444,17 @@ async def submit_case_evidence(
     # Update case status & OCR results
     update_data = {
         "status": "AWAITING_REVIEW",
-        "note": note.strip() if note else None,
+        "note": note.strip() if note else case_res_data.get("note"),
         "ocr_result": ocr_result.model_dump(),
         "updated_at": now_iso,
     }
     update_legacy_case(case_id, update_data)
+    case_res_data.update(update_data)
 
     # Update vault owner account status
     update_profile(owner_id, {"account_status": "AWAITING_REVIEW"})
 
-    record_audit(current_user.id, "EVIDENCE_SUBMITTED", f"Submitted evidence file: {safe_filename}", "SUCCESS")
+    record_audit(current_user.id, "EVIDENCE_SUBMITTED", f"Submitted {category} evidence: {safe_filename}", "SUCCESS")
 
     # Fetch updated evidence list
     ev_res = get_case_evidence_for_case(case_id)
@@ -358,6 +463,9 @@ async def submit_case_evidence(
             id=str(e["id"]),
             file_name=e["file_name"],
             file_type=e.get("file_type", "document"),
+            category=e.get("category", "DEATH_CERTIFICATE"),
+            document_number=e.get("document_number"),
+            issuing_authority=e.get("issuing_authority"),
             uploaded_at=e["uploaded_at"],
             size_bytes=e.get("size_bytes"),
             download_url=f"/api/reviewer/evidence/{e['id']}/download",
@@ -368,13 +476,88 @@ async def submit_case_evidence(
     return NomineeCase(
         id=case_id,
         status="AWAITING_REVIEW",
-        created_at=now_iso,
+        created_at=case_res_data.get("created_at", now_iso),
         owner_name=owner_name,
         nominee_name=nominee_rec.get("name"),
+        claim_reason=case_res_data.get("claim_reason"),
+        incident_date=case_res_data.get("incident_date"),
+        jurisdiction=case_res_data.get("jurisdiction"),
+        declaration_confirmed=case_res_data.get("declaration_confirmed", False),
         note=update_data["note"],
         evidence=evidence_list,
         ocr=ocr_result,
         audit_history=[
-            {"timestamp": now_iso, "event": "EVIDENCE_SUBMITTED", "description": "Evidence submitted and analyzed"}
+            {"timestamp": now_iso, "event": "EVIDENCE_SUBMITTED", "description": f"Evidence submitted ({category}) and analyzed"}
+        ],
+    )
+
+
+@router.delete("/case/evidence/{evidence_id}", response_model=NomineeCase)
+async def delete_case_evidence(
+    evidence_id: str,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """
+    Deletes an uploaded evidence document if the case is not yet finalized.
+    """
+    from app.database import _case_evidence
+    supabase = get_supabase()
+
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No active nominee case found.")
+
+    case_data = get_legacy_case_for_nominee(nominee_rec["id"])
+    if not case_data:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    case_id = str(case_data["id"])
+
+    # Remove from memory and Supabase
+    eid = str(evidence_id)
+    if eid in _case_evidence:
+        del _case_evidence[eid]
+    try:
+        supabase.table("case_evidence").delete().eq("id", eid).execute()
+    except Exception:
+        pass
+
+    record_audit(current_user.id, "EVIDENCE_REMOVED", f"Removed evidence {evidence_id}", "SUCCESS")
+
+    # Reload updated evidence list
+    ev_res = get_case_evidence_for_case(case_id)
+    evidence_list = [
+        EvidenceItem(
+            id=str(e["id"]),
+            file_name=e["file_name"],
+            file_type=e.get("file_type", "document"),
+            category=e.get("category", "DEATH_CERTIFICATE"),
+            document_number=e.get("document_number"),
+            issuing_authority=e.get("issuing_authority"),
+            uploaded_at=e["uploaded_at"],
+            size_bytes=e.get("size_bytes"),
+            download_url=f"/api/reviewer/evidence/{e['id']}/download",
+        )
+        for e in ev_res
+    ]
+
+    owner_profile = get_profile_by_id(nominee_rec["owner_id"]) or {}
+    owner_name = owner_profile.get("full_name") or "Vault Owner"
+
+    return NomineeCase(
+        id=case_id,
+        status=case_data.get("status", "ELIGIBLE"),
+        created_at=case_data.get("created_at"),
+        owner_name=owner_name,
+        nominee_name=nominee_rec.get("name"),
+        claim_reason=case_data.get("claim_reason"),
+        incident_date=case_data.get("incident_date"),
+        jurisdiction=case_data.get("jurisdiction"),
+        declaration_confirmed=case_data.get("declaration_confirmed", False),
+        note=case_data.get("note"),
+        evidence=evidence_list,
+        ocr=case_data.get("ocr_result"),
+        audit_history=[
+            {"timestamp": datetime.now(timezone.utc).isoformat(), "event": "EVIDENCE_REMOVED", "description": "Evidence document removed"}
         ],
     )

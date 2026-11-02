@@ -205,9 +205,20 @@ class EvidenceItem(BaseModel):
     id: str
     file_name: str
     file_type: str
+    category: Optional[str] = "DEATH_CERTIFICATE"
+    document_number: Optional[str] = None
+    issuing_authority: Optional[str] = None
     uploaded_at: str
     size_bytes: Optional[int] = None
     download_url: Optional[str] = None
+
+
+class InitiateClaimPayload(BaseModel):
+    claim_reason: str
+    incident_date: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    note: Optional[str] = None
+    declaration_confirmed: bool = True
 
 
 class NomineeCase(BaseModel):
@@ -216,6 +227,10 @@ class NomineeCase(BaseModel):
     created_at: Optional[str] = None
     owner_name: Optional[str] = None
     nominee_name: Optional[str] = None
+    claim_reason: Optional[str] = None
+    incident_date: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    declaration_confirmed: Optional[bool] = False
     note: Optional[str] = None
     evidence: Optional[List[EvidenceItem]] = []
     ocr: Optional[OcrResult] = None
@@ -231,6 +246,10 @@ class ReviewerCase(BaseModel):
     owner_dob: Optional[str] = None
     nominee_name: Optional[str] = None
     nominee_email: Optional[str] = None
+    claim_reason: Optional[str] = None
+    incident_date: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    declaration_confirmed: Optional[bool] = False
     note: Optional[str] = None
     evidence: Optional[List[EvidenceItem]] = []
     ocr: Optional[OcrResult] = None

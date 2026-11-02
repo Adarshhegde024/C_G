@@ -111,21 +111,32 @@ export interface OcrResult {
   discrepancies?: string[];
 }
 
+export type EvidenceCategory = "DEATH_CERTIFICATE" | "GOVERNMENT_ID" | "MEDICAL_RECORD" | "COURT_ORDER" | "SUPPORTING_DOC";
+
+export interface EvidenceItem {
+  id: string;
+  file_name: string;
+  file_type: string;
+  category?: EvidenceCategory | string;
+  document_number?: string | null;
+  issuing_authority?: string | null;
+  uploaded_at: string;
+  size_bytes?: number;
+  download_url?: string;
+}
+
 export interface NomineeCase {
   id: string;
   status: string;
   created_at?: string;
   owner_name?: string;
   nominee_name?: string;
+  claim_reason?: string | null;
+  incident_date?: string | null;
+  jurisdiction?: string | null;
+  declaration_confirmed?: boolean;
   note?: string | null;
-  evidence?: Array<{
-    id: string;
-    file_name: string;
-    file_type: string;
-    uploaded_at: string;
-    size_bytes?: number;
-    download_url?: string;
-  }>;
+  evidence?: EvidenceItem[];
   ocr?: OcrResult | null;
   audit_history?: Array<{ timestamp: string; event: string; description?: string }>;
 }
@@ -139,8 +150,12 @@ export interface ReviewerCase {
   owner_dob?: string | null;
   nominee_name?: string;
   nominee_email?: string;
+  claim_reason?: string | null;
+  incident_date?: string | null;
+  jurisdiction?: string | null;
+  declaration_confirmed?: boolean;
   note?: string | null;
-  evidence?: NomineeCase["evidence"];
+  evidence?: EvidenceItem[];
   ocr?: OcrResult | null;
   audit_history?: NomineeCase["audit_history"];
 }

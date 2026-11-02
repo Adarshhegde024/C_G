@@ -646,6 +646,36 @@ def get_legacy_case_by_id(case_id: str) -> Optional[Dict[str, Any]]:
     return _legacy_cases.get(cid)
 
 
+def get_legacy_case_for_nominee(nominee_id: str) -> Optional[Dict[str, Any]]:
+    """Get active legacy case for nominee (instant in-memory lookup first)."""
+    nid = str(nominee_id)
+    for c in _legacy_cases.values():
+        if str(c.get("nominee_id")) == nid:
+            return c
+    try:
+        res = supabase_client.table("legacy_cases").select("*").eq("nominee_id", nid).limit(1).execute()
+        if res.data and len(res.data) > 0:
+            c = res.data[0]
+            _legacy_cases[str(c["id"])] = c
+            return c
+    except Exception:
+        pass
+
+    # Demo nominee fallback
+    if nid == "00000000-0000-0000-0000-000000000003":
+        demo_case = {
+            "id": "00000000-0000-0000-0000-000000000004",
+            "owner_id": "00000000-0000-0000-0000-000000000001",
+            "nominee_id": nid,
+            "status": "ELIGIBLE",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _legacy_cases[demo_case["id"]] = demo_case
+        return demo_case
+
+    return None
+
+
 def get_all_legacy_cases() -> List[Dict[str, Any]]:
     """Get all cases for reviewers."""
     if _legacy_cases:
@@ -750,6 +780,17 @@ def prewarm_cache():
             if n_res.data:
                 for n in n_res.data:
                     _nominees[str(n["id"])] = n
+
+            c_res = supabase_client.table("legacy_cases").select("*").execute()
+            if c_res.data:
+                for c in c_res.data:
+                    _legacy_cases[str(c["id"])] = c
+
+            e_res = supabase_client.table("case_evidence").select("*").execute()
+            if e_res.data:
+                for e in e_res.data:
+                    _case_evidence[str(e["id"])] = e
+
             logger.info("Database cache prewarmed from Supabase.")
         except Exception as e:
             logger.debug(f"prewarm_cache background error: {e}")

@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -314,5 +315,89 @@ def test_medical_hold_toggle_and_freeze():
     assert dash_resumed["account_status"] == "ACTIVE"
     assert dash_resumed["medical_hold"]["active"] is False
     assert dash_resumed["next_check_in_deadline"] is not None
+
+
+def test_nominee_claim_and_categorized_evidence():
+    """Verify Gap 4: Nominee multi-step claim initiation, categorized evidence upload, and management."""
+    import io
+
+    # 1. Register owner
+    owner_email = f"owner_claim_{uuid.uuid4().hex[:6]}@example.com"
+    reg_owner = client.post("/api/auth/register", json={
+        "full_name": "Legacy Claim Owner",
+        "email": owner_email,
+        "phone": "+1 555-0199",
+        "date_of_birth": "1975-04-12",
+        "password": "Password123!",
+        "check_in_frequency": {"value": 30, "unit": "days"},
+        "grace_period": {"value": 7, "unit": "days"},
+        "face_samples": ["data:image/jpeg;base64,/9j/4AAQSkZJRg=="]
+    })
+    assert reg_owner.status_code in [200, 201]
+    owner_token = client.post("/api/auth/login", json={"email": owner_email, "password": "Password123!"}).json()["token"]
+
+    # 2. Designate nominee
+    nom_email = f"nominee_claim_{uuid.uuid4().hex[:6]}@example.com"
+    nom_res = client.post(
+        "/api/nominee",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": "Trusted Claim Nominee", "email": nom_email}
+    )
+    assert nom_res.status_code == 200
+
+    # 3. Register nominee account and login
+    reg_nom = client.post("/api/auth/register", json={
+        "full_name": "Trusted Claim Nominee",
+        "email": nom_email,
+        "phone": "+1 555-0188",
+        "date_of_birth": "1990-08-24",
+        "password": "Password123!",
+        "check_in_frequency": {"value": 30, "unit": "days"},
+        "grace_period": {"value": 7, "unit": "days"},
+        "face_samples": ["data:image/jpeg;base64,/9j/4AAQSkZJRg=="]
+    })
+    assert reg_nom.status_code in [200, 201]
+    nom_token = client.post("/api/auth/login", json={"email": nom_email, "password": "Password123!"}).json()["token"]
+    nom_headers = {"Authorization": f"Bearer {nom_token}"}
+
+    # 4. Initiate claim grounds
+    claim_payload = {
+        "claim_reason": "OWNER_DECEASED",
+        "incident_date": "2026-10-18",
+        "jurisdiction": "San Francisco, CA, USA",
+        "note": "Filing legacy claim with official death certificate.",
+        "declaration_confirmed": True
+    }
+    claim_res = client.post("/api/nominee/case/claim", headers=nom_headers, json=claim_payload)
+    assert claim_res.status_code == 200
+    c_data = claim_res.json()
+    assert c_data["claim_reason"] == "OWNER_DECEASED"
+    assert c_data["incident_date"] == "2026-10-18"
+    assert c_data["declaration_confirmed"] is True
+
+    # 5. Upload categorized evidence with metadata
+    pdf_bytes = b"%PDF-1.4 mock death certificate content"
+    files = {"file": ("official_death_cert.pdf", io.BytesIO(pdf_bytes), "application/pdf")}
+    data = {
+        "category": "DEATH_CERTIFICATE",
+        "document_number": "DC-2026-88129",
+        "issuing_authority": "SF Dept of Public Health",
+        "note": "Certified official seal attached"
+    }
+    ev_res = client.post("/api/nominee/case/evidence", headers=nom_headers, files=files, data=data)
+    assert ev_res.status_code == 200
+    ev_case = ev_res.json()
+    assert len(ev_case["evidence"]) >= 1
+    latest_ev = ev_case["evidence"][0]
+    assert latest_ev["category"] == "DEATH_CERTIFICATE"
+    assert latest_ev["document_number"] == "DC-2026-88129"
+    assert latest_ev["issuing_authority"] == "SF Dept of Public Health"
+
+    # 6. Delete evidence document
+    del_res = client.delete(f"/api/nominee/case/evidence/{latest_ev['id']}", headers=nom_headers)
+    assert del_res.status_code == 200
+    del_case = del_res.json()
+    assert not any(e["id"] == latest_ev["id"] for e in del_case["evidence"])
+
 
 
