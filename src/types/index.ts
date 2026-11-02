@@ -123,6 +123,8 @@ export interface NomineeCase {
     file_name: string;
     file_type: string;
     uploaded_at: string;
+    size_bytes?: number;
+    download_url?: string;
   }>;
   ocr?: OcrResult | null;
   audit_history?: Array<{ timestamp: string; event: string; description?: string }>;

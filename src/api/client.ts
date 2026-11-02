@@ -4,7 +4,7 @@
 // environment variables without touching application code. All API modules
 // route their requests through this client.
 
-const BASE_URL = (import.meta.env["VITE_API_URL"] ?? "").toString().replace(/\/+$/, "");
+export const BASE_URL = (import.meta.env["VITE_API_URL"] ?? "").toString().replace(/\/+$/, "");
 
 const TOKEN_STORAGE_KEY = "cloudguard.session.token";
 
@@ -43,6 +43,7 @@ export function onSessionExpired(listener: SessionExpiredListener): () => void {
 
 export function getToken(): string | null {
   try {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") return null;
     return localStorage.getItem(TOKEN_STORAGE_KEY);
   } catch {
     return null;
@@ -51,6 +52,7 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null): void {
   try {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") return;
     if (token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
     } else {
@@ -82,7 +84,8 @@ interface RequestOptions {
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, formData, query, signal } = options;
 
-  const url = new URL(`${BASE_URL}${path}`, window.location.origin);
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:8080";
+  const url = new URL(`${BASE_URL}${path}`, origin);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) url.searchParams.set(key, String(value));

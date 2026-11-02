@@ -4,13 +4,23 @@ import { routeTree } from "./routeTree.gen";
 import { authApi } from "./auth/authApi";
 
 export const getRouter = () => {
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60, // 60 seconds: avoids unnecessary refetch spinners when navigating
+        gcTime: 1000 * 60 * 10,
+        refetchOnWindowFocus: false, // Prevents sudden refetch lag when clicking between browser tabs
+        retry: 1,
+      },
+    },
+  });
 
   const router = createRouter({
     routeTree,
     context: { queryClient, auth: authApi },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    defaultPreload: "intent", // Instantly preloads page code & data on link hover
+    defaultPreloadStaleTime: 1000 * 60,
     defaultErrorComponent: ErrorFallback,
     defaultNotFoundComponent: NotFoundFallback,
   });

@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node / Build Outputs
 node_modules
 dist
 dist-ssr
@@ -16,9 +17,38 @@ dist-ssr
 .nitro
 *.local
 
-# Wrangler / Cloudflare
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local fallback storage & uploads
+backend/storage/
+backend/uploads/
+backend/app/storage/
+backend/**/storage/
+backend/**/uploads/
+
+# Wrangler / Cloudflare / Vercel
 .wrangler/
 .dev.vars
+.vercel/
 
 # Editor directories and files
 .vscode/*

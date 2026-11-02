@@ -7,6 +7,7 @@ import { acceptInvitation, fetchInvitation } from "@/api/invite";
 import { ApiError } from "@/api/client";
 import { setToken } from "@/api/client";
 import { homeForRole } from "@/auth/roles";
+import { authStore } from "@/auth/authStore";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

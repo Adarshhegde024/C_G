@@ -11,8 +11,8 @@ interface UseCameraResult {
 }
 
 /**
- * Thin wrapper around getUserMedia for camera previews. Audio is requested
- * together with video so the check-in flow can record both.
+ * Robust wrapper around getUserMedia for camera previews.
+ * Handles React DOM mount timing, stream synchronization, and hardware fallbacks.
  */
 export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
   const { audio = false } = options;
@@ -21,22 +21,58 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
   const [status, setStatus] = useState<CameraStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
+  // Synchronize active media stream with video element whenever ref mounts or status changes
+  useEffect(() => {
+    if (status === "ready" && videoRef.current && streamRef.current) {
+      const video = videoRef.current;
+      if (video.srcObject !== streamRef.current) {
+        video.srcObject = streamRef.current;
+      }
+      video.play().catch((err) => {
+        console.warn("Camera video play interrupted:", err);
+      });
+    }
+  });
+
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setStatus("idle");
   }, []);
 
   const start = useCallback(async () => {
-    if (streamRef.current) return true;
+    if (streamRef.current) {
+      if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        await videoRef.current.play().catch(() => undefined);
+      }
+      setStatus("ready");
+      return true;
+    }
+
     setStatus("starting");
     setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
-        audio,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+          audio,
+        });
+      } catch (firstErr) {
+        if (firstErr instanceof DOMException && (firstErr.name === "NotAllowedError" || firstErr.name === "SecurityError")) {
+          throw firstErr;
+        }
+        // Fallback to basic video constraint if camera doesn't support specific resolution or facingMode
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio,
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CloudUpload, FileText, Gavel, Upload } from "lucide-react";
+import { CloudUpload, Download, FileText, Gavel, Upload } from "lucide-react";
 
 import { fetchNomineeCase, submitNomineeEvidence } from "@/api/nominee";
+import { triggerEvidenceDownload } from "@/api/reviewer";
 import { ApiError } from "@/api/client";
 import { roleGuard } from "@/auth/roles";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -26,6 +27,19 @@ export function NomineeCasePage() {
   const [note, setNote] = useState("");
   const [validation, setValidation] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  async function handleDownload(id: string, fileName: string) {
+    setDownloadingId(id);
+    try {
+      await triggerEvidenceDownload(id, fileName);
+      toast.success(`Downloaded ${fileName}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download evidence.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   const query = useQuery<NomineeCase, ApiError>({ queryKey: ["nominee-case"], queryFn: fetchNomineeCase, retry: 1 });
 
@@ -189,14 +203,26 @@ export function NomineeCasePage() {
           <CardContent>
             <ul className="space-y-2">
               {caseData.evidence.map((item) => (
-                <li key={item.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                  <span className="flex items-center gap-2 text-sm font-medium">
+                <li key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border px-4 py-3">
+                  <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-lavender" aria-hidden />
-                    {item.file_name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                  </span>
+                    <span className="text-sm font-medium">{item.file_name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadingId === item.id}
+                      onClick={() => handleDownload(item.id, item.file_name)}
+                      className="gap-1.5 h-7 px-2.5 text-xs"
+                    >
+                      <Download className="h-3.5 w-3.5 text-lavender" aria-hidden />
+                      {downloadingId === item.id ? "Downloading…" : "Download"}
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

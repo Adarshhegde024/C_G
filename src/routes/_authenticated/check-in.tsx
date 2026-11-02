@@ -176,9 +176,7 @@ function CheckInPage() {
 
       <Card className="mx-auto max-w-2xl overflow-hidden">
         <div className="relative aspect-[4/3] bg-vault">
-          {stage !== "result" && status === "ready" ? (
-            <video ref={videoRef} className="h-full w-full object-cover" playsInline muted autoPlay aria-label="Camera preview" />
-          ) : null}
+          <video ref={videoRef} className={`h-full w-full object-cover ${stage !== "result" && status === "ready" ? "block" : "hidden"}`} playsInline muted autoPlay aria-label="Camera preview" />
 
           {/* Camera frame overlay */}
           {stage !== "result" && status === "ready" && stage !== "permission" ? (

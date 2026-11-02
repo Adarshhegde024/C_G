@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   Calendar,
   CloudUpload,
+  Download,
   FileText,
   HardDrive,
   Lock,
@@ -22,6 +23,7 @@ import {
   fetchDocuments,
   releaseDocument,
   revokeDocumentRelease,
+  triggerDocumentDownload,
   uploadDocument,
 } from "@/api/documents";
 import { fetchRecipients } from "@/api/recipients";
@@ -257,7 +259,22 @@ function DocumentActions({ document }: { document: VaultDocument }) {
           className="absolute right-0 top-10 z-20 w-52 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-xl"
           onMouseLeave={() => setMenuOpen(false)}
         >
-          <button
+                    <button
+            className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-accent focus-ring"
+            onClick={async () => {
+              setMenuOpen(false);
+              try {
+                await triggerDocumentDownload(document.id, document.name);
+                toast.success(`Downloaded ${document.name}`);
+              } catch (err: any) {
+                toast.error(err.message || 'Failed to download document.');
+              }
+            }}
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Download document
+          </button>
+<button
             className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-accent focus-ring"
             onClick={() => {
               setMenuOpen(false);

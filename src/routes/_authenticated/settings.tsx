@@ -2,9 +2,24 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, CheckCircle2, LogOut, Timer } from "lucide-react";
+import {
+  Bell,
+  CheckCircle2,
+  LogOut,
+  PauseCircle,
+  PlayCircle,
+  ShieldAlert,
+  Snowflake,
+  Timer,
+} from "lucide-react";
 
-import { fetchProfile, updateSecuritySettings, type ProfileDetails } from "@/api/profile";
+import {
+  fetchProfile,
+  updateSecuritySettings,
+  toggleMedicalHold,
+  type ProfileDetails,
+  type MedicalHoldInfo,
+} from "@/api/profile";
 import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -122,11 +137,14 @@ function SettingsPage() {
   const [frequency, setFrequency] = useState<DurationValue>({ value: 30, unit: "days" });
   const [grace, setGrace] = useState<DurationValue>({ value: 72, unit: "hours" });
   const [prefs, setPrefs] = useState(readPrefs);
+  const [holdNote, setHoldNote] = useState("");
 
-  const query = useQuery<ProfileDetails & { check_in_frequency?: DurationValue; grace_period?: DurationValue }, ApiError>({
+  const query = useQuery<ProfileDetails, ApiError>({
     queryKey: ["profile"],
     queryFn: fetchProfile,
   });
+
+  const medicalHold = query.data?.medical_hold;
 
   useEffect(() => {
     const data = query.data;
@@ -139,6 +157,20 @@ function SettingsPage() {
     onSuccess: () => {
       toast.success("Security settings updated.");
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (err: ApiError) => toast.error(err.message),
+  });
+
+  const medicalHoldMutation = useMutation({
+    mutationFn: (variables: { active: boolean; note?: string }) => toggleMedicalHold(variables),
+    onSuccess: (res) => {
+      toast.success(res.message);
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      if (!res.active) {
+        setHoldNote("");
+      }
     },
     onError: (err: ApiError) => toast.error(err.message),
   });
@@ -168,35 +200,108 @@ function SettingsPage() {
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Timer className="h-4.5 w-4.5 text-lavender" aria-hidden />
-                Check-in settings
-              </CardTitle>
-              <CardDescription>
-                Shorter intervals can be useful while testing; longer intervals are suitable for real
-                deployment. Choose the values that fit you.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <DurationEditor
-                label="Check-in frequency"
-                description="How often you complete a verified check-in to keep your vault active."
-                value={frequency}
-                onChange={setFrequency}
-              />
-              <DurationEditor
-                label="Grace period"
-                description="How long you can still check in after a missed deadline."
-                value={grace}
-                onChange={setGrace}
-              />
-              <Button variant="accent" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                {saveMutation.isPending ? "Saving…" : "Save settings"}
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Timer className="h-4.5 w-4.5 text-lavender" aria-hidden />
+                  Check-in settings
+                </CardTitle>
+                <CardDescription>
+                  Shorter intervals can be useful while testing; longer intervals are suitable for real
+                  deployment. Choose the values that fit you.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <DurationEditor
+                  label="Check-in frequency"
+                  description="How often you complete a verified check-in to keep your vault active."
+                  value={frequency}
+                  onChange={setFrequency}
+                />
+                <DurationEditor
+                  label="Grace period"
+                  description="How long you can still check in after a missed deadline."
+                  value={grace}
+                  onChange={setGrace}
+                />
+                <Button variant="accent" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                  {saveMutation.isPending ? "Saving…" : "Save settings"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className={medicalHold?.active ? "border-lavender/50 bg-lavender/5" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-4.5 w-4.5 text-lavender" aria-hidden />
+                  Medical Hold & Vault Freeze
+                </CardTitle>
+                <CardDescription>
+                  Temporarily pause all check-in countdowns, grace periods, and document releases during hospitalization, medical treatment, or travel.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {medicalHold?.active ? (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-lavender/40 bg-secondary/80 p-4">
+                      <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                        <Snowflake className="h-4 w-4 text-lavender animate-pulse" aria-hidden />
+                        Vault is currently FROZEN
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Document releases, nominee escalation, and check-in deadlines are paused. Your documents remain completely private and locked.
+                      </p>
+                      {medicalHold.start_date ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Active since: {new Date(medicalHold.start_date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                        </p>
+                      ) : null}
+                      {medicalHold.note ? (
+                        <p className="mt-1 text-xs text-muted-foreground italic">
+                          "{medicalHold.note}"
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <Button
+                      variant="accent"
+                      className="gap-2"
+                      disabled={medicalHoldMutation.isPending}
+                      onClick={() => medicalHoldMutation.mutate({ active: false })}
+                    >
+                      <PlayCircle className="h-4 w-4" aria-hidden />
+                      {medicalHoldMutation.isPending ? "Resuming…" : "Resume Normal Vault & Check-ins"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      If you anticipate being unable to check in due to scheduled surgery, medical recovery, or lack of internet, activate a freeze. You can unfreeze anytime.
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="hold-note">Hold reason / note (optional)</Label>
+                      <Input
+                        id="hold-note"
+                        value={holdNote}
+                        onChange={(e) => setHoldNote(e.target.value)}
+                        placeholder="e.g., Hospital surgery & recovery, offline for 2 weeks."
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="gap-2 text-lavender hover:bg-lavender/10"
+                      disabled={medicalHoldMutation.isPending}
+                      onClick={() => medicalHoldMutation.mutate({ active: true, note: holdNote })}
+                    >
+                      <PauseCircle className="h-4 w-4" aria-hidden />
+                      {medicalHoldMutation.isPending ? "Freezing…" : "Activate Medical Hold (Freeze Vault)"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="space-y-6">
             <Card>

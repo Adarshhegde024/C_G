@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Camera, RotateCcw, Trash2, Video } from "lucide-react";
 
 import { captureFrame, useCamera } from "@/hooks/use-camera";
@@ -27,19 +27,24 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
   const { status, error, videoRef, start, stop } = useCamera();
   const [samples, setSamples] = useState<string[]>([]);
 
+  // Automatically request camera access when entering Face Enrollment step
+  useEffect(() => {
+    start().catch(() => undefined);
+  }, [start]);
+
   async function openCamera() {
     await start();
   }
 
   function capture() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !video.videoWidth) return;
     setSamples((current) => [...current, captureFrame(video, 480)].slice(0, REQUIRED_SAMPLES));
   }
 
   function retake(index: number) {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !video.videoWidth) return;
     setSamples((current) => current.map((sample, i) => (i === index ? captureFrame(video, 480) : sample)));
   }
 
@@ -76,16 +81,15 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
 
       <div className="relative overflow-hidden rounded-xl border border-border bg-vault">
         <div className="flex aspect-[4/3] items-center justify-center">
-          {status === "ready" ? (
-            <video
-              ref={videoRef}
-              className="h-full w-full object-cover"
-              playsInline
-              muted
-              autoPlay
-              aria-label="Camera preview"
-            />
-          ) : (
+          <video
+            ref={videoRef}
+            className={`h-full w-full object-cover ${status === "ready" ? "block" : "hidden"}`}
+            playsInline
+            muted
+            autoPlay
+            aria-label="Camera preview"
+          />
+          {status !== "ready" ? (
             <div className="px-6 text-center text-vault-muted">
               <Video className="mx-auto h-10 w-10 opacity-60" aria-hidden />
               <p className="mt-3 text-sm">
@@ -102,7 +106,7 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
                 </Button>
               ) : null}
             </div>
-          )}
+          ) : null}
         </div>
         {status === "ready" ? (
           <div className="pointer-events-none absolute inset-8 rounded-[50%] border-2 border-dashed border-lavender/60" aria-hidden />

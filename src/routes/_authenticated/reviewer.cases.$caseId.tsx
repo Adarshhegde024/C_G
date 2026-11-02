@@ -2,15 +2,34 @@ import { useState } from "react";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, FileText, Gavel, MessageSquarePlus, Scale, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Download,
+  Eye,
+  FileText,
+  Gavel,
+  Loader2,
+  MessageSquarePlus,
+  Scale,
+  XCircle,
+} from "lucide-react";
 
-import { approveCase, fetchReviewerCase, rejectCase, requestMoreInfo } from "@/api/reviewer";
+import {
+  approveCase,
+  fetchReviewerCase,
+  rejectCase,
+  requestMoreInfo,
+  triggerEvidenceDownload,
+  fetchEvidenceBlob,
+} from "@/api/reviewer";
 import { ApiError } from "@/api/client";
 import { roleGuard } from "@/auth/roles";
 import { CaseStatusBadge } from "@/components/reviewer/CaseStatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Label, Textarea } from "@/components/ui/input";
 import { PageLoader, Skeleton } from "@/components/ui/skeleton";
 import type { ReviewerCase } from "@/types";
@@ -33,16 +52,52 @@ export const Route = createFileRoute("/_authenticated/reviewer/cases/$caseId")({
   component: ReviewerCaseDetailPage,
 });
 
+interface EvidencePreviewState {
+  id: string;
+  fileName: string;
+  fileType: string;
+}
+
 function ReviewerCaseDetailPage() {
   const { caseId } = Route.useParams();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
+  const [previewItem, setPreviewItem] = useState<EvidencePreviewState | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<{ url: string; contentType: string } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const query = useQuery<ReviewerCase, ApiError>({
     queryKey: ["reviewer-case", caseId],
     queryFn: () => fetchReviewerCase(caseId),
     retry: 1,
   });
+
+  async function openPreview(item: { id: string; file_name: string; file_type: string }) {
+    setPreviewItem({ id: item.id, fileName: item.file_name, fileType: item.file_type });
+    setLoadingPreview(true);
+    setPreviewBlob(null);
+    try {
+      const blobData = await fetchEvidenceBlob(item.id);
+      setPreviewBlob(blobData);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load evidence preview");
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
+
+  async function handleDownload(id: string, fileName: string) {
+    setDownloadingId(id);
+    try {
+      await triggerEvidenceDownload(id, fileName);
+      toast.success(`Downloaded ${fileName}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download evidence.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   function makeMutation(action: "approve" | "reject" | "request-info") {
     return useMutation<ReviewerCase, ApiError, void>({
@@ -164,19 +219,51 @@ function ReviewerCaseDetailPage() {
             <FileText className="h-4.5 w-4.5 text-lavender" aria-hidden />
             Submitted evidence
           </CardTitle>
+          <CardDescription>
+            Official documents submitted by the nominee for legacy verification (e.g. Death Certificate, Medical Records).
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {reviewCase.evidence?.length ? (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {reviewCase.evidence.map((item) => (
-                <li key={item.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <FileText className="h-4 w-4 text-lavender" aria-hidden />
-                    {item.file_name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                  </span>
+                <li
+                  key={item.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-border/80"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+                      <FileText className="h-5 w-5 text-lavender" aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{item.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Uploaded {new Date(item.uploaded_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                        {item.size_bytes ? ` · ${(item.size_bytes / 1024).toFixed(1)} KB` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPreview(item)}
+                      className="gap-1.5"
+                    >
+                      <Eye className="h-3.5 w-3.5" aria-hidden />
+                      Preview
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadingId === item.id}
+                      onClick={() => handleDownload(item.id, item.file_name)}
+                      className="gap-1.5"
+                    >
+                      <Download className="h-3.5 w-3.5 text-lavender" aria-hidden />
+                      {downloadingId === item.id ? "Downloading…" : "Download"}
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -253,6 +340,89 @@ function ReviewerCaseDetailPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Dialog
+        open={Boolean(previewItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (previewBlob?.url) window.URL.revokeObjectURL(previewBlob.url);
+            setPreviewItem(null);
+            setPreviewBlob(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-3xl"
+          title={previewItem?.fileName ?? "Evidence Document Preview"}
+          description="Reviewing official verification evidence document."
+        >
+          {loadingPreview ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-lavender" />
+              <p className="text-sm text-muted-foreground">Loading evidence document…</p>
+            </div>
+          ) : previewBlob ? (
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+                {previewBlob.contentType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(previewItem?.fileName || "") ? (
+                  <div className="flex max-h-[65vh] items-center justify-center p-4">
+                    <img
+                      src={previewBlob.url}
+                      alt={previewItem?.fileName}
+                      className="max-h-[60vh] max-w-full rounded-lg object-contain shadow-sm"
+                    />
+                  </div>
+                ) : previewBlob.contentType === "application/pdf" || (previewItem?.fileName || "").toLowerCase().endsWith(".pdf") ? (
+                  <iframe
+                    src={previewBlob.url}
+                    title={previewItem?.fileName}
+                    className="h-[65vh] w-full rounded-lg border-0"
+                  />
+                ) : (
+                  <div className="max-h-[60vh] overflow-auto p-6 font-mono text-xs whitespace-pre-wrap">
+                    <iframe
+                      src={previewBlob.url}
+                      title={previewItem?.fileName}
+                      className="h-[50vh] w-full rounded-lg border-0"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <span className="text-xs text-muted-foreground truncate max-w-xs sm:max-w-md">
+                  {previewItem?.fileName}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (previewBlob.url) window.open(previewBlob.url, "_blank");
+                    }}
+                  >
+                    Open in new tab
+                  </Button>
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => {
+                      if (previewItem) handleDownload(previewItem.id, previewItem.fileName);
+                    }}
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden />
+                    Download original
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Failed to load preview for this file. You can still download the file directly.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

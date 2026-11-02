@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FolderLock, Search } from "lucide-react";
+import { Download, FileText, FolderLock, Search } from "lucide-react";
+import { toast } from "sonner";
 
-import { fetchDocuments } from "@/api/documents";
+import { fetchDocuments, triggerDocumentDownload } from "@/api/documents";
 import { ApiError } from "@/api/client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import type { VaultDocument } from "@/types";
 
 export function RecipientDocuments() {
   const [search, setSearch] = useState("");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const query = useQuery<VaultDocument[], ApiError>({ queryKey: ["documents"], queryFn: () => fetchDocuments(), retry: 1 });
 
   const documents = useMemo(() => {
@@ -61,14 +63,46 @@ export function RecipientDocuments() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {documents.map((doc) => (
-            <Card key={doc.id} className="card-hover p-5">
-              <div className="flex items-start justify-between gap-3">
-                <p className="truncate font-medium">{doc.name}</p>
-                <Badge variant="success">Released</Badge>
+            <Card key={doc.id} className="card-hover flex flex-col justify-between p-5">
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+                      <FileText className="h-4.5 w-4.5 text-lavender" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">{doc.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {doc.file_type || "file"} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(0)} KB` : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="success">Released</Badge>
+                </div>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {doc.file_type || "file"} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(0)} KB` : "—"}
-              </p>
+
+              <div className="mt-5 border-t border-border pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 border-lavender/40 hover:bg-lavender/10"
+                  disabled={downloadingId === doc.id}
+                  onClick={async () => {
+                    setDownloadingId(doc.id);
+                    try {
+                      await triggerDocumentDownload(doc.id, doc.name);
+                      toast.success(`Downloaded ${doc.name}`);
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to download document.");
+                    } finally {
+                      setDownloadingId(null);
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4 text-lavender" aria-hidden />
+                  {downloadingId === doc.id ? "Downloading…" : "Download file"}
+                </Button>
+              </div>
             </Card>
           ))}
         </div>
