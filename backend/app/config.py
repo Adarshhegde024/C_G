@@ -34,7 +34,7 @@ ALLOWED_ORIGINS: list[str] = [
     origin.strip()
     for origin in os.environ.get(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://localhost:8080"
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://localhost:8080,https://c-g-ecru.vercel.app"
     ).split(",")
     if origin.strip()
 ]
@@ -55,7 +55,7 @@ STORAGE_DIR: Path = Path(__file__).resolve().parent.parent / "uploads"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Frontend Web Application URL
-FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "https://c-g-ecru.vercel.app").rstrip("/")
 
 # Transactional Email (SMTP / Resend) Settings
 SMTP_HOST: str = os.environ.get("SMTP_HOST", "")

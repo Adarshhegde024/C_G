@@ -66,6 +66,7 @@ export interface Recipient {
   status: InvitationStatus;
   assigned_documents?: number;
   invitation_status?: InvitationStatus;
+  invitation_link?: string | null;
 }
 
 export interface Nominee {
@@ -73,6 +74,7 @@ export interface Nominee {
   name: string;
   email: string;
   status: InvitationStatus | (string & {});
+  invitation_link?: string | null;
 }
 
 export interface CheckInRecord {

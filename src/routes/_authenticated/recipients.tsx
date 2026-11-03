@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, MoreVertical, Send, Trash2, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Mail, MoreVertical, Send, Trash2, UserPlus, Users } from "lucide-react";
 
 import { addRecipient, fetchRecipients, removeRecipient, sendRecipientInvitation, updateRecipient } from "@/api/recipients";
 import { ApiError } from "@/api/client";
@@ -120,6 +120,14 @@ function RecipientsPage() {
   const [dialog, setDialog] = useState<{ open: boolean; initial: RecipientFormState | null }>({ open: false, initial: null });
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Recipient | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyRecipientLink = (id: string, link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopiedId(id);
+    toast.success("Invitation link copied to clipboard");
+    setTimeout(() => setCopiedId(null), 2000);
+  };
   const queryClient = useQueryClient();
 
   const query = useQuery<Recipient[], ApiError>({ queryKey: ["recipients"], queryFn: fetchRecipients });
@@ -220,6 +228,18 @@ function RecipientsPage() {
                           <Send className="h-4 w-4" aria-hidden />
                           {status === "PENDING" ? "Resend invitation" : "Send invitation"}
                         </button>
+                        {recipient.invitation_link && (
+                          <button
+                            className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-accent focus-ring"
+                            onClick={() => {
+                              setMenuFor(null);
+                              handleCopyRecipientLink(recipient.id, recipient.invitation_link!);
+                            }}
+                          >
+                            {copiedId === recipient.id ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                            {copiedId === recipient.id ? "Copied link" : "Copy invite link"}
+                          </button>
+                        )}
                         <button
                           className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 focus-ring"
                           onClick={() => {
@@ -234,6 +254,19 @@ function RecipientsPage() {
                     ) : null}
                   </div>
                 </div>
+                {status === "PENDING" && recipient.invitation_link && (
+                  <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-muted/20 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                    <span className="truncate">Direct invite link available</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyRecipientLink(recipient.id, recipient.invitation_link!)}
+                      className="inline-flex shrink-0 items-center gap-1 font-medium text-primary hover:underline"
+                    >
+                      {copiedId === recipient.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                      {copiedId === recipient.id ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                )}
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
                   {statusBadge(status)}
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

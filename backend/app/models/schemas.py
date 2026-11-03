@@ -135,6 +135,7 @@ class Recipient(BaseModel):
     status: str = "PENDING"
     assigned_documents: Optional[int] = 0
     invitation_status: Optional[str] = None
+    invitation_link: Optional[str] = None
 
 
 class AddRecipientPayload(BaseModel):
@@ -152,6 +153,7 @@ class Nominee(BaseModel):
     name: str
     email: str
     status: str = "PENDING"
+    invitation_link: Optional[str] = None
 
 
 class SaveNomineePayload(BaseModel):

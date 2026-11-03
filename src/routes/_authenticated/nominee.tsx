@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Info, Send, Trash2, UserCheck } from "lucide-react";
+import { Check, Copy, Info, Send, Trash2, UserCheck } from "lucide-react";
 
 import { fetchNominee, removeNominee, saveNominee, sendNomineeInvitation, updateNominee } from "@/api/nominee";
 import { ApiError } from "@/api/client";
@@ -36,6 +36,14 @@ function NomineePage() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    toast.success("Invitation link copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const query = useQuery<Nominee | null, ApiError>({ queryKey: ["nominee"], queryFn: fetchNominee });
   const nominee = query.data ?? null;
@@ -170,8 +178,14 @@ function NomineePage() {
               </Badge>
               <Button size="sm" variant="outline" onClick={() => inviteMutation.mutate()} disabled={inviteMutation.isPending}>
                 <Send className="h-4 w-4" aria-hidden />
-                {inviteMutation.isPending ? "Sending…" : nominee.status === "PENDING" ? "Resend invitation" : "Send invitation"}
+                {inviteMutation.isPending ? "Sending…" : nominee.status === "PENDING" ? "Resend invitation email" : "Send invitation email"}
               </Button>
+              {nominee.invitation_link && (
+                <Button size="sm" variant="outline" onClick={() => handleCopyLink(nominee.invitation_link!)}>
+                  {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Copied" : "Copy invitation link"}
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
                 Edit
               </Button>
@@ -180,6 +194,28 @@ function NomineePage() {
                 Remove
               </Button>
             </div>
+
+            {nominee.status === "PENDING" && nominee.invitation_link && (
+              <div className="mt-4 rounded-lg border border-border/60 bg-muted/30 p-3.5 text-xs text-muted-foreground space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">Direct Onboarding Link</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyLink(nominee.invitation_link!)}
+                    className="text-primary hover:underline flex items-center gap-1 font-medium"
+                  >
+                    {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    {copied ? "Copied!" : "Copy URL"}
+                  </button>
+                </div>
+                <p className="truncate font-mono text-[11px] text-muted-foreground select-all bg-background/80 p-1.5 rounded border border-border/40">
+                  {nominee.invitation_link}
+                </p>
+                <p className="text-[11px]">
+                  If automated email delivery is delayed, you can directly share this link with your nominee via message or email.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (

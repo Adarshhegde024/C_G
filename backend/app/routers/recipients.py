@@ -20,6 +20,7 @@ from app.database import (
 )
 from app.services.audit import record_audit
 from app.services.email import send_recipient_invitation_email
+from app.config import FRONTEND_URL
 
 router = APIRouter(prefix="/api/recipients", tags=["Recipients"])
 
@@ -28,7 +29,20 @@ router = APIRouter(prefix="/api/recipients", tags=["Recipients"])
 async def list_recipients(current_user: AuthUser = Depends(get_current_user)):
     """Lists all trusted recipients configured by the vault owner."""
     raw = get_recipients(current_user.id)
-    return [Recipient(**r) for r in raw]
+    out = []
+    for r in raw:
+        tok = r.get("invitation_token")
+        inv_link = f"{FRONTEND_URL}/invite/{tok}" if tok else None
+        out.append(Recipient(
+            id=str(r["id"]),
+            name=r["name"],
+            email=r["email"],
+            status=r.get("status", "PENDING"),
+            assigned_documents=r.get("assigned_documents", 0),
+            invitation_status=r.get("invitation_status", r.get("status", "PENDING")),
+            invitation_link=inv_link,
+        ))
+    return out
 
 
 @router.post("", response_model=Recipient)
@@ -66,6 +80,7 @@ async def add_recipient(
         token=token,
     )
 
+    inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Recipient(
         id=rec_id,
         name=saved["name"],
@@ -73,6 +88,7 @@ async def add_recipient(
         status=saved.get("status", "PENDING"),
         assigned_documents=0,
         invitation_status="PENDING",
+        invitation_link=inv_link,
     )
 
 
@@ -146,6 +162,7 @@ async def invite_recipient(
 
     record_audit(current_user.id, "RECIPIENT_INVITED", f"Dispatched invitation to recipient {r.get('email')}", "SUCCESS")
 
+    inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Recipient(
         id=str(r["id"]),
         name=r["name"],
@@ -153,4 +170,5 @@ async def invite_recipient(
         status="PENDING",
         invitation_status="PENDING",
         assigned_documents=0,
+        invitation_link=inv_link,
     )

@@ -36,6 +36,7 @@ from app.database import (
 from app.services.audit import record_audit
 from app.services.ocr import analyze_evidence_document
 from app.services.email import send_nominee_invitation_email
+from app.config import FRONTEND_URL
 
 logger = logging.getLogger("cloudguard.nominee")
 router = APIRouter(prefix="/api/nominee", tags=["Nominee"])
@@ -49,11 +50,14 @@ async def get_nominee(current_user: AuthUser = Depends(get_current_user)):
     raw = get_nominee_for_owner(current_user.id)
     if not raw:
         return None
+    token = raw.get("invitation_token")
+    inv_link = f"{FRONTEND_URL}/invite/{token}" if token else None
     return Nominee(
         id=str(raw["id"]),
         name=raw["name"],
         email=raw["email"],
         status=raw.get("status", "PENDING"),
+        invitation_link=inv_link,
     )
 
 
@@ -92,11 +96,13 @@ async def save_nominee(
         token=token,
     )
 
+    inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Nominee(
         id=nom_id,
         name=saved["name"],
         email=saved["email"],
         status="PENDING",
+        invitation_link=inv_link,
     )
 
 
@@ -117,11 +123,14 @@ async def update_nominee(
     if not n:
         raise HTTPException(status_code=404, detail="Nominee not found.")
     record_audit(current_user.id, "NOMINEE_UPDATED", f"Updated nominee: {payload.name}", "SUCCESS")
+    token = n.get("invitation_token")
+    inv_link = f"{FRONTEND_URL}/invite/{token}" if token else None
     return Nominee(
         id=str(n["id"]),
         name=n["name"],
         email=n["email"],
         status=n.get("status", "PENDING"),
+        invitation_link=inv_link,
     )
 
 
@@ -164,11 +173,13 @@ async def invite_nominee(current_user: AuthUser = Depends(get_current_user)):
     )
     
     record_audit(current_user.id, "NOMINEE_INVITATION_SENT", f"Sent invitation to {n.get('email')}", "SUCCESS")
+    inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Nominee(
         id=str(n["id"]),
         name=n["name"],
         email=n["email"],
         status="PENDING",
+        invitation_link=inv_link,
     )
 
 
