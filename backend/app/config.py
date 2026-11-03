@@ -55,15 +55,15 @@ STORAGE_DIR: Path = Path(__file__).resolve().parent.parent / "uploads"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Frontend Web Application URL
-FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "https://c-g-ecru.vercel.app").rstrip("/")
+FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "https://c-g-ecru.vercel.app").strip().rstrip("/")
 
 # Transactional Email (SMTP / Resend) Settings
-SMTP_HOST: str = os.environ.get("SMTP_HOST", "")
-SMTP_PORT: int = int(os.environ.get("SMTP_PORT", 587))
-SMTP_USER: str = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
-SMTP_FROM_EMAIL: str = os.environ.get("SMTP_FROM_EMAIL", os.environ.get("SMTP_USER", "noreply@cloudguard.io"))
-SMTP_FROM_NAME: str = os.environ.get("SMTP_FROM_NAME", "CloudGuard Security")
-SMTP_USE_TLS: bool = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
-SMTP_USE_SSL: bool = os.environ.get("SMTP_USE_SSL", "false").lower() in ("true", "1", "yes")
-RESEND_API_KEY: str = os.environ.get("RESEND_API_KEY", "")
+SMTP_HOST: str = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT: int = int(str(os.environ.get("SMTP_PORT", "587")).strip() or 587)
+SMTP_USER: str = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "").strip()
+SMTP_FROM_EMAIL: str = os.environ.get("SMTP_FROM_EMAIL", os.environ.get("SMTP_USER", "noreply@cloudguard.io")).strip()
+SMTP_FROM_NAME: str = os.environ.get("SMTP_FROM_NAME", "CloudGuard Security").strip()
+SMTP_USE_TLS: bool = os.environ.get("SMTP_USE_TLS", "true").strip().lower() in ("true", "1", "yes")
+SMTP_USE_SSL: bool = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in ("true", "1", "yes")
+RESEND_API_KEY: str = os.environ.get("RESEND_API_KEY", "").strip()
