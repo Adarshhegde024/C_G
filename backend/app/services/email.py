@@ -77,10 +77,15 @@ def _send_via_brevo(to_email: str, subject: str, html_body: str, text_body: str)
         "textContent": text_body,
     }
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=10) as response:
-        if response.status in (200, 201, 202):
-            logger.info(f"Delivered email to {to_email} via Brevo API")
-            return True
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status in (200, 201, 202):
+                logger.info(f"Delivered email to {to_email} via Brevo API")
+                return True
+    except urllib.error.HTTPError as err:
+        err_body = err.read().decode("utf-8", errors="replace")
+        logger.error(f"Brevo API error ({err.code}): {err_body}")
+        raise RuntimeError(f"Brevo API error {err.code}: {err_body}")
     return False
 
 
