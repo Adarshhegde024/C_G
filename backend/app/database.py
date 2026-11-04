@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
 import bcrypt
 from supabase import create_client, Client
-from app.config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_ROLE_KEY
+from app.config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_ROLE_KEY, STORAGE_DIR
 
 logger = logging.getLogger("cloudguard.database")
 
@@ -99,6 +99,33 @@ _legacy_cases: Dict[str, Dict[str, Any]] = {}
 _case_evidence: Dict[str, Dict[str, Any]] = {}
 _audit_logs: List[Dict[str, Any]] = []
 _notifications: List[Dict[str, Any]] = []
+
+_STATE_FILE = STORAGE_DIR / "cloudguard_local_state.json"
+
+def _persist_state_to_disk():
+    try:
+        import json
+        payload = {
+            "nominees": _nominees,
+            "recipients": _recipients,
+        }
+        with open(_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception as e:
+        logger.debug(f"Failed to persist state to disk: {e}")
+
+def _load_state_from_disk():
+    try:
+        import json
+        if _STATE_FILE.exists():
+            with open(_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                _nominees.update(data.get("nominees", {}))
+                _recipients.update(data.get("recipients", {}))
+    except Exception as e:
+        logger.debug(f"Failed to load state from disk: {e}")
+
+_load_state_from_disk()
 
 
 def get_supabase() -> Client:
@@ -306,6 +333,7 @@ def save_recipient(data: Dict[str, Any]) -> Dict[str, Any]:
     """Store recipient and sync with Supabase in background."""
     rid = str(data["id"])
     _recipients[rid] = dict(data)
+    _persist_state_to_disk()
 
     def _sync():
         try:
@@ -324,6 +352,7 @@ def update_recipient(rec_id: str, patch: Dict[str, Any]) -> Optional[Dict[str, A
     rid = str(rec_id)
     if rid in _recipients:
         _recipients[rid].update(patch)
+        _persist_state_to_disk()
 
     def _sync():
         try:
@@ -331,6 +360,7 @@ def update_recipient(rec_id: str, patch: Dict[str, Any]) -> Optional[Dict[str, A
             if res.data and len(res.data) > 0:
                 if rid in _recipients:
                     _recipients[rid].update(res.data[0])
+                    _persist_state_to_disk()
         except Exception as e:
             logger.debug(f"update_recipient Supabase: {e}")
 
@@ -343,6 +373,7 @@ def delete_recipient_record(rec_id: str, owner_id: str) -> bool:
     rid = str(rec_id)
     if rid in _recipients and str(_recipients[rid].get("owner_id")) == str(owner_id):
         del _recipients[rid]
+        _persist_state_to_disk()
 
     def _sync():
         try:
@@ -402,12 +433,14 @@ def save_nominee(data: Dict[str, Any]) -> Dict[str, Any]:
     _nominees[nid] = dict(data)
     oid = str(data.get("owner_id", ""))
     _nominee_miss_cache.pop(oid, None)
+    _persist_state_to_disk()
 
     def _sync():
         try:
             res = supabase_client.table("nominees").insert(data).execute()
             if res.data and len(res.data) > 0:
                 _nominees[nid].update(res.data[0])
+                _persist_state_to_disk()
         except Exception as e:
             logger.debug(f"save_nominee Supabase: {e}")
 
@@ -422,6 +455,7 @@ def update_nominee(nominee_id: str, patch: Dict[str, Any]) -> Optional[Dict[str,
         _nominees[nid].update(patch)
         oid = str(_nominees[nid].get("owner_id", ""))
         _nominee_miss_cache.pop(oid, None)
+        _persist_state_to_disk()
 
     def _sync():
         try:
@@ -429,6 +463,7 @@ def update_nominee(nominee_id: str, patch: Dict[str, Any]) -> Optional[Dict[str,
             if res.data and len(res.data) > 0:
                 if nid in _nominees:
                     _nominees[nid].update(res.data[0])
+                    _persist_state_to_disk()
         except Exception as e:
             logger.debug(f"update_nominee Supabase: {e}")
 
@@ -443,6 +478,7 @@ def delete_nominee_for_owner(owner_id: str) -> bool:
     for nid in to_delete:
         _nominees.pop(nid, None)
     _nominee_miss_cache[oid] = datetime.now(timezone.utc).timestamp()
+    _persist_state_to_disk()
 
     def _sync():
         try:
