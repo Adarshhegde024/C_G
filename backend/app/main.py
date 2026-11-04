@@ -4,6 +4,7 @@ Integrates all API routers, CORS configuration, error handling, and startup life
 """
 
 import asyncio
+from typing import Optional
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -98,3 +99,48 @@ async def health_check():
         "version": "1.0.0",
         "database": "Supabase PostgreSQL",
     }
+
+
+@app.get("/api/system/email-diagnostics", tags=["System"])
+async def email_diagnostics(to: Optional[str] = None):
+    """Diagnoses email provider status and sends a real test message."""
+    from app.config import (
+        BREVO_API_KEY,
+        RESEND_API_KEY,
+        SMTP_HOST,
+        SMTP_PORT,
+        SMTP_USER,
+        SMTP_FROM_EMAIL,
+        SMTP_FROM_NAME,
+    )
+    from app.services.email import _send_via_brevo, _send_via_smtp, _send_via_resend
+
+    target = to or SMTP_FROM_EMAIL or "test@example.com"
+    status_report = {
+        "configured_providers": {
+            "brevo": bool(BREVO_API_KEY),
+            "resend": bool(RESEND_API_KEY),
+            "smtp": bool(SMTP_HOST),
+        },
+        "from_email": SMTP_FROM_EMAIL,
+        "from_name": SMTP_FROM_NAME,
+        "test_recipient": target,
+        "results": {},
+        "errors": {},
+    }
+
+    if BREVO_API_KEY:
+        try:
+            ok = _send_via_brevo(target, "CloudGuard Brevo Test", "<p>Test email via Brevo API</p>", "Test email via Brevo API")
+            status_report["results"]["brevo"] = "DELIVERED" if ok else "FAILED"
+        except Exception as e:
+            status_report["errors"]["brevo"] = str(e)
+
+    if RESEND_API_KEY:
+        try:
+            ok = _send_via_resend(target, "CloudGuard Resend Test", "<p>Test email via Resend API</p>", "Test email via Resend API")
+            status_report["results"]["resend"] = "DELIVERED" if ok else "FAILED"
+        except Exception as e:
+            status_report["errors"]["resend"] = str(e)
+
+    return status_report
