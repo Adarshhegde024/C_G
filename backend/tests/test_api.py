@@ -91,6 +91,17 @@ def test_recipients_and_nominee():
     assert get_nom.status_code == 200
     assert get_nom.json()["name"] == "Test Nominee"
 
+    # Delete Nominee
+    del_nom = client.delete("/api/nominee", headers=headers)
+    assert del_nom.status_code == 204
+    get_after_del = client.get("/api/nominee", headers=headers)
+    assert get_after_del.status_code == 200
+    assert get_after_del.json() is None
+
+    # Re-save nominee for downstream tests
+    nom_res = client.post("/api/nominee", headers=headers, json=nom_payload)
+    assert nom_res.status_code == 200
+
 
 def test_document_management():
     """Verify document upload, recipient assignment, release/revoke, and file download."""

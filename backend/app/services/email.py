@@ -24,6 +24,7 @@ from app.config import (
     SMTP_USE_TLS,
     SMTP_USE_SSL,
     RESEND_API_KEY,
+    BREVO_API_KEY,
 )
 from app.database import save_notification, get_profile_by_email
 
@@ -41,12 +42,12 @@ def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     if SMTP_USE_SSL:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=12) as server:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=4) as server:
             if SMTP_USER and SMTP_PASSWORD:
                 server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
     else:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=12) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=4) as server:
             server.ehlo()
             if SMTP_USE_TLS:
                 server.starttls()
@@ -59,8 +60,32 @@ def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) 
     return True
 
 
+def _send_via_brevo(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Delivers email via Brevo (Sendinblue) HTTP API over HTTPS (Port 443 - works on Render Free Tier)."""
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "api-key": BREVO_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    sender_email = SMTP_FROM_EMAIL if SMTP_FROM_EMAIL and "@" in SMTP_FROM_EMAIL else (SMTP_USER or "noreply@cloudguard.io")
+    payload = {
+        "sender": {"name": SMTP_FROM_NAME or "CloudGuard Security", "email": sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body,
+        "textContent": text_body,
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        if response.status in (200, 201, 202):
+            logger.info(f"Delivered email to {to_email} via Brevo API")
+            return True
+    return False
+
+
 def _send_via_resend(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-    """Delivers email via Resend HTTP API."""
+    """Delivers email via Resend HTTP API over HTTPS (Port 443 - works on Render Free Tier)."""
     url = "https://api.resend.com/emails"
     headers = {
         "Authorization": f"Bearer {RESEND_API_KEY}",
@@ -87,34 +112,42 @@ def _send_via_resend(to_email: str, subject: str, html_body: str, text_body: str
 def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> Dict[str, Any]:
     """
     Unified transactional email dispatcher.
-    Tries SMTP -> Resend -> Local dev fallback.
+    Tries Brevo (HTTPS) -> Resend (HTTPS) -> SMTP -> Local dev fallback.
     Always returns structured delivery status without crashing.
     """
     clean_to = to_email.strip().lower()
     plain = text_body or subject
 
-    # Prevent real SMTP dispatch to internal demo/placeholder domains (avoids mail bounces)
+    # Prevent real dispatch to internal demo/placeholder domains (avoids mail bounces)
     DEMO_DOMAINS = ("@cloudguard.io", "@example.com", "@test.com", "@localhost", "@sample.com")
     is_demo_address = any(clean_to.endswith(d) for d in DEMO_DOMAINS)
 
     if not is_demo_address:
-        # 1. Try SMTP if host configured (prioritize full SMTP gateway for real recipients)
-        if SMTP_HOST:
+        # 1. Try Brevo HTTP API over Port 443 (never blocked by Render Free Tier)
+        if BREVO_API_KEY:
             try:
-                if _send_via_smtp(clean_to, subject, html_body, plain):
-                    return {"success": True, "method": "smtp", "recipient": clean_to}
+                if _send_via_brevo(clean_to, subject, html_body, plain):
+                    return {"success": True, "method": "brevo", "recipient": clean_to}
             except Exception as e:
-                logger.warning(f"SMTP dispatch failed to {clean_to}: {e}")
+                logger.warning(f"Brevo API dispatch failed to {clean_to}: {e}")
 
-        # 2. Try Resend if configured
+        # 2. Try Resend HTTP API over Port 443 (never blocked by Render Free Tier)
         if RESEND_API_KEY:
             try:
                 if _send_via_resend(clean_to, subject, html_body, plain):
                     return {"success": True, "method": "resend", "recipient": clean_to}
             except Exception as e:
                 logger.warning(f"Resend dispatch failed to {clean_to}: {e}")
+
+        # 3. Try SMTP (works locally and on hosting without blocked mail ports)
+        if SMTP_HOST:
+            try:
+                if _send_via_smtp(clean_to, subject, html_body, plain):
+                    return {"success": True, "method": "smtp", "recipient": clean_to}
+            except Exception as e:
+                logger.warning(f"SMTP dispatch failed to {clean_to} (Port blocked or timeout): {e}")
     else:
-        logger.info(f"Demo address detected ({clean_to}) - skipping external SMTP dispatch to avoid mailbox bounce.")
+        logger.info(f"Demo address detected ({clean_to}) - skipping external dispatch to avoid mailbox bounce.")
 
     # 3. Development / Safe Console Fallback & In-App Notification
     print("\n" + "=" * 70)

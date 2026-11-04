@@ -70,15 +70,27 @@ async def add_recipient(
     saved = save_recipient(entry)
     record_audit(current_user.id, "RECIPIENT_ADDED", f"Added recipient: {payload.name} ({email})", "SUCCESS")
 
-    # Send real invitation email to recipient
+    # Send real invitation email to recipient in background thread
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
-    send_recipient_invitation_email(
-        recipient_name=payload.name.strip(),
-        recipient_email=email,
-        owner_name=owner_name,
-        token=token,
-    )
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            send_recipient_invitation_email,
+            payload.name.strip(),
+            email,
+            owner_name,
+            token,
+        )
+    except Exception:
+        send_recipient_invitation_email(
+            recipient_name=payload.name.strip(),
+            recipient_email=email,
+            owner_name=owner_name,
+            token=token,
+        )
 
     inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Recipient(
@@ -150,15 +162,27 @@ async def invite_recipient(
     if not r:
         raise HTTPException(status_code=404, detail="Recipient not found.")
 
-    # Send / resend recipient invitation email
+    # Send / resend recipient invitation email in background thread
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
-    send_recipient_invitation_email(
-        recipient_name=r["name"],
-        recipient_email=r["email"],
-        owner_name=owner_name,
-        token=token,
-    )
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            send_recipient_invitation_email,
+            r["name"],
+            r["email"],
+            owner_name,
+            token,
+        )
+    except Exception:
+        send_recipient_invitation_email(
+            recipient_name=r["name"],
+            recipient_email=r["email"],
+            owner_name=owner_name,
+            token=token,
+        )
 
     record_audit(current_user.id, "RECIPIENT_INVITED", f"Dispatched invitation to recipient {r.get('email')}", "SUCCESS")
 

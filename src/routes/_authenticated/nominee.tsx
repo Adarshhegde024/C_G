@@ -87,6 +87,7 @@ function NomineePage() {
       toast.success("Nominee removed.");
       setName("");
       setEmail("");
+      queryClient.setQueryData(["nominee"], null);
       invalidate();
       setConfirmingRemove(false);
     },

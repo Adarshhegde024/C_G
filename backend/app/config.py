@@ -67,3 +67,4 @@ SMTP_FROM_NAME: str = os.environ.get("SMTP_FROM_NAME", "CloudGuard Security").st
 SMTP_USE_TLS: bool = os.environ.get("SMTP_USE_TLS", "true").strip().lower() in ("true", "1", "yes")
 SMTP_USE_SSL: bool = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in ("true", "1", "yes")
 RESEND_API_KEY: str = os.environ.get("RESEND_API_KEY", "").strip()
+BREVO_API_KEY: str = os.environ.get("BREVO_API_KEY", "").strip()

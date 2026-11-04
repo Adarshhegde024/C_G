@@ -436,6 +436,24 @@ def update_nominee(nominee_id: str, patch: Dict[str, Any]) -> Optional[Dict[str,
     return _nominees.get(nid)
 
 
+def delete_nominee_for_owner(owner_id: str) -> bool:
+    """Removes nominee designation for owner from both in-memory cache and Supabase."""
+    oid = str(owner_id)
+    to_delete = [nid for nid, n in _nominees.items() if str(n.get("owner_id")) == oid]
+    for nid in to_delete:
+        _nominees.pop(nid, None)
+    _nominee_miss_cache[oid] = datetime.now(timezone.utc).timestamp()
+
+    def _sync():
+        try:
+            supabase_client.table("nominees").delete().eq("owner_id", oid).execute()
+        except Exception as e:
+            logger.debug(f"delete_nominee_for_owner Supabase: {e}")
+
+    _db_executor.submit(_sync)
+    return True
+
+
 def get_nominee_for_owner(owner_id: str) -> Optional[Dict[str, Any]]:
     """Get configured nominee for owner (instant from memory cache)."""
     oid = str(owner_id)

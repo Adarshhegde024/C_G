@@ -26,6 +26,7 @@ from app.database import (
     get_profile_by_id,
     save_nominee as db_save_nominee,
     update_nominee as db_update_nominee,
+    delete_nominee_for_owner as db_delete_nominee_for_owner,
     save_case_evidence,
     get_case_evidence_for_case,
     update_legacy_case,
@@ -86,15 +87,27 @@ async def save_nominee(
     saved = db_save_nominee(entry)
     record_audit(current_user.id, "NOMINEE_CONFIGURED", f"Designated nominee: {payload.name} ({email})", "SUCCESS")
 
-    # Send real invitation email with secure one-time onboarding link
+    # Send real invitation email in background thread so request completes immediately
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
-    send_nominee_invitation_email(
-        nominee_name=payload.name.strip(),
-        nominee_email=email,
-        owner_name=owner_name,
-        token=token,
-    )
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            send_nominee_invitation_email,
+            payload.name.strip(),
+            email,
+            owner_name,
+            token,
+        )
+    except Exception:
+        send_nominee_invitation_email(
+            nominee_name=payload.name.strip(),
+            nominee_email=email,
+            owner_name=owner_name,
+            token=token,
+        )
 
     inv_link = f"{FRONTEND_URL}/invite/{token}"
     return Nominee(
@@ -137,13 +150,7 @@ async def update_nominee(
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_nominee(current_user: AuthUser = Depends(get_current_user)):
     """Removes the nominee designation."""
-    nom = get_nominee_for_owner(current_user.id)
-    if nom:
-        supabase = get_supabase()
-        try:
-            supabase.table("nominees").delete().eq("owner_id", current_user.id).execute()
-        except Exception:
-            pass
+    db_delete_nominee_for_owner(current_user.id)
     record_audit(current_user.id, "NOMINEE_REMOVED", "Removed nominee designation", "SUCCESS")
     return None
 
@@ -162,15 +169,27 @@ async def invite_nominee(current_user: AuthUser = Depends(get_current_user)):
         "invitation_expires_at": expires,
     })
     
-    # Send / resend real invitation email
+    # Send / resend real invitation email in background
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
-    send_nominee_invitation_email(
-        nominee_name=n["name"],
-        nominee_email=n["email"],
-        owner_name=owner_name,
-        token=token,
-    )
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            send_nominee_invitation_email,
+            n["name"],
+            n["email"],
+            owner_name,
+            token,
+        )
+    except Exception:
+        send_nominee_invitation_email(
+            nominee_name=n["name"],
+            nominee_email=n["email"],
+            owner_name=owner_name,
+            token=token,
+        )
     
     record_audit(current_user.id, "NOMINEE_INVITATION_SENT", f"Sent invitation to {n.get('email')}", "SUCCESS")
     inv_link = f"{FRONTEND_URL}/invite/{token}"
