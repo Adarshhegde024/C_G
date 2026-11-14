@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/skeleton";
+import { triggerHaptic } from "@/lib/native";
 
 export const Route = createFileRoute("/_authenticated/check-in")({
   head: () => ({
@@ -144,6 +145,7 @@ function CheckInPage() {
       setResult(response);
       setStage("result");
       if (String(response.result).toUpperCase() === "SUCCESS") {
+        void triggerHaptic("success");
         toast.success("Check-in successful.");
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         queryClient.invalidateQueries({ queryKey: ["checkins"] });
@@ -151,6 +153,7 @@ function CheckInPage() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     } catch (err) {
+      void triggerHaptic("error");
       setSubmitError(err instanceof ApiError ? err.message : "CloudGuard is temporarily unable to reach the server. Please try again.");
       setStage("result");
       setResult({ result: "FAILED", reason: null });

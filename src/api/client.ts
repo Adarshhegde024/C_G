@@ -4,7 +4,22 @@
 // environment variables without touching application code. All API modules
 // route their requests through this client.
 
-export const BASE_URL = (import.meta.env["VITE_API_URL"] ?? "").toString().replace(/\/+$/, "");
+function resolveBaseUrl(): string {
+  const envUrl = (import.meta.env["VITE_API_URL"] ?? "").toString().trim().replace(/\/+$/, "");
+  if (envUrl) return envUrl;
+
+  // On Android/iOS native WebViews (capacitor://localhost, ionic://, etc.), route to cloud backend
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin || "";
+    const isNativeScheme = origin.startsWith("capacitor:") || origin.startsWith("ionic:") || origin.startsWith("file:");
+    if (isNativeScheme) {
+      return "https://c-g-2-gqee.onrender.com";
+    }
+  }
+  return "";
+}
+
+export const BASE_URL = resolveBaseUrl();
 
 const TOKEN_STORAGE_KEY = "cloudguard.session.token";
 

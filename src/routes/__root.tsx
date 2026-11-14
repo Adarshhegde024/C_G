@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/auth/AuthProvider";
 import type { AuthApi } from "@/auth/authApi";
 import { Toaster } from "@/components/ui/sonner";
+import { initNativeFeatures } from "@/lib/native";
 
 function NotFoundComponent() {
   return (
@@ -80,7 +81,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient; auth
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" },
+      { name: "theme-color", content: "#0D0F17" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { title: "CloudGuard — Your secure digital legacy vault" },
       { name: "description", content: "A private, thoughtfully designed home for your most important documents and the people you trust." },
       { name: "author", content: "CloudGuard" },
@@ -125,6 +128,9 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => {
+    void initNativeFeatures();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
