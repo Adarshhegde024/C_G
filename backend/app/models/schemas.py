@@ -54,6 +54,10 @@ class RegisterPayload(BaseModel):
     face_samples: List[str] = []
 
 
+class ReEnrollFacePayload(BaseModel):
+    face_samples: List[str]
+
+
 class LoginPayload(BaseModel):
     email: str
     password: str

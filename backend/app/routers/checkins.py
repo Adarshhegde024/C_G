@@ -3,10 +3,10 @@ CloudGuard Check-ins & Audit API Router
 Handles live biometric verification submission, check-in history, and audit log access.
 """
 
-from typing import List
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, File, UploadFile, Request
+from fastapi import APIRouter, Depends, File, UploadFile, Request, Form
 
 from app.dependencies import get_current_user
 from app.models.schemas import AuthUser, CheckInRecord, SubmitCheckInResult, AuditEvent, DurationValue
@@ -18,7 +18,7 @@ from app.database import (
     save_check_in,
     update_profile,
 )
-from app.services.biometrics import verify_checkin_video
+from app.services.biometrics import verify_checkin_video, generate_checkin_challenge
 from app.services.audit import record_audit
 from app.services.checkin_scheduler import (
     calculate_next_deadline,
@@ -64,23 +64,47 @@ async def list_checkins(current_user: AuthUser = Depends(get_current_user)):
     return records
 
 
+@router.get("/checkins/challenge", response_model=Dict[str, Any])
+@router.get("/check-ins/challenge", response_model=Dict[str, Any])
+async def get_checkin_challenge(current_user: AuthUser = Depends(get_current_user)):
+    """
+    Generates a dynamic phrase challenge containing a randomized 4-digit code.
+    The user must speak this sentence during their check-in recording.
+    """
+    return generate_checkin_challenge()
+
+
 @router.post("/checkins", response_model=SubmitCheckInResult)
+@router.post("/check-ins", response_model=SubmitCheckInResult)
 async def submit_checkin(
     request: Request,
     video: UploadFile = File(...),
+    face_snapshot: Optional[UploadFile] = File(None),
+    challenge_id: Optional[str] = Form(None),
+    transcript: Optional[str] = Form(None),
     current_user: AuthUser = Depends(get_current_user),
 ):
     """
-    Receives live biometric video recording, performs liveness detection,
-    face matching against enrolled template, and voice activity verification.
+    Receives live biometric video recording, optional high-resolution face snapshot,
+    dynamic challenge token, and real-time speech transcript.
+    Performs background-independent facial feature verification, dynamic speech verification,
+    and liveness motion detection.
     """
     video_bytes = await video.read()
+    snapshot_bytes = await face_snapshot.read() if face_snapshot else None
+
     supabase = get_supabase()
     profile = get_profile_by_id(current_user.id) or {}
     enrolled_data = profile.get("face_encodings")
 
     # Run Server-Side Computer Vision & Biometric Pipeline
-    verification = verify_checkin_video(video_bytes, enrolled_data)
+    verification = verify_checkin_video(
+        video_bytes=video_bytes,
+        enrolled_data=enrolled_data,
+        face_snapshot_bytes=snapshot_bytes,
+        challenge_id=challenge_id,
+        transcript=transcript,
+    )
 
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()

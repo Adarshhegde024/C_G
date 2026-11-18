@@ -4,12 +4,13 @@ import { Camera, RotateCcw, Trash2, Video } from "lucide-react";
 import { captureFrame, useCamera } from "@/hooks/use-camera";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FaceOvalGuide } from "./FaceOvalGuide";
 
 const INSTRUCTIONS = [
-  "Look directly at the camera",
-  "Keep your face clearly visible",
-  "Use good lighting",
-  "Remove anything covering your face",
+  "Center face inside the oval",
+  "Background is filtered out",
+  "Ensure face is well-lit",
+  "Look directly at camera",
 ];
 
 const REQUIRED_SAMPLES = 5;
@@ -109,7 +110,10 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
           ) : null}
         </div>
         {status === "ready" ? (
-          <div className="pointer-events-none absolute inset-8 rounded-[50%] border-2 border-dashed border-lavender/60" aria-hidden />
+          <FaceOvalGuide
+            status={count === REQUIRED_SAMPLES ? "locked" : "aligning"}
+            hint={count === REQUIRED_SAMPLES ? "All 5 samples captured" : "Center face in oval · Background excluded"}
+          />
         ) : null}
       </div>
 

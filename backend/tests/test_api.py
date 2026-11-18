@@ -411,4 +411,104 @@ def test_nominee_claim_and_categorized_evidence():
     assert not any(e["id"] == latest_ev["id"] for e in del_case["evidence"])
 
 
+def test_biometric_face_and_spoken_challenge():
+    """
+    Verifies that:
+    1. A dynamic spoken challenge phrase with a 4-digit code is generated.
+    2. Owner can re-enroll their face template from the profile endpoint.
+    3. Stranger face is strictly REJECTED (face mismatch).
+    4. Owner face with matching spoken phrase is ACCEPTED (SUCCESS).
+    5. Owner face with missing/unmatched spoken phrase is REJECTED.
+    """
+    import cv2
+    import numpy as np
+    import base64
+    import io
+
+    token = get_owner_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    def make_face_bytes(eye_x=40, mouth_y=95):
+        img = np.full((128, 128, 3), 120, dtype=np.uint8)
+        cv2.circle(img, (eye_x, 45), 10, (30, 30, 30), -1)
+        cv2.circle(img, (128 - eye_x, 45), 10, (30, 30, 30), -1)
+        cv2.ellipse(img, (64, 70), (8, 15), 0, 0, 360, (60, 60, 60), -1)
+        cv2.ellipse(img, (64, mouth_y), (25, 8), 0, 0, 360, (40, 40, 40), -1)
+        _, buf = cv2.imencode(".jpg", img)
+        return buf.tobytes()
+
+    owner_bytes = make_face_bytes(40, 95)
+    owner_b64 = "data:image/jpeg;base64," + base64.b64encode(owner_bytes).decode("ascii")
+
+    stranger_bytes = make_face_bytes(25, 115)
+    stranger_b64 = "data:image/jpeg;base64," + base64.b64encode(stranger_bytes).decode("ascii")
+
+    # 1. Re-enroll owner's face baseline
+    enroll_res = client.post("/api/profile/re-enroll-face", headers=headers, json={"face_samples": [owner_b64]})
+    assert enroll_res.status_code == 200
+    assert enroll_res.json()["ok"] is True
+
+    # Check profile returns has_face_enrolled == True
+    prof_res = client.get("/api/profile", headers=headers)
+    assert prof_res.status_code == 200
+    assert prof_res.json()["has_face_enrolled"] is True
+
+    # 2. Fetch dynamic spoken challenge phrase
+    ch_res = client.get("/api/checkins/challenge", headers=headers)
+    assert ch_res.status_code == 200
+    ch_data = ch_res.json()
+    assert "challenge_id" in ch_data
+    assert "phrase" in ch_data
+    assert "code" in ch_data
+    challenge_id = ch_data["challenge_id"]
+    phrase = ch_data["phrase"]
+
+    mock_video = b"\x1a\x45\xdf\xa3" + b"\x00" * 5000
+
+    # 3. Test Stranger check-in -> MUST FAIL
+    stranger_files = {
+        "video": ("video.webm", io.BytesIO(mock_video), "video/webm"),
+        "face_snapshot": ("snapshot.jpg", io.BytesIO(stranger_bytes), "image/jpeg"),
+    }
+    stranger_data = {
+        "challenge_id": challenge_id,
+        "transcript": phrase,
+    }
+    res_stranger = client.post("/api/checkins", headers=headers, files=stranger_files, data=stranger_data)
+    assert res_stranger.status_code == 200
+    s_json = res_stranger.json()
+    assert s_json["result"] == "FAILED"
+    assert "does not match" in (s_json["reason"] or "")
+
+    # 4. Test Owner with incorrect / missing phrase -> MUST FAIL
+    owner_bad_phrase_files = {
+        "video": ("video.webm", io.BytesIO(mock_video), "video/webm"),
+        "face_snapshot": ("snapshot.jpg", io.BytesIO(owner_bytes), "image/jpeg"),
+    }
+    owner_bad_phrase_data = {
+        "challenge_id": challenge_id,
+        "transcript": "something completely wrong and unrelated",
+    }
+    res_bad_phrase = client.post("/api/checkins", headers=headers, files=owner_bad_phrase_files, data=owner_bad_phrase_data)
+    assert res_bad_phrase.status_code == 200
+    bp_json = res_bad_phrase.json()
+    assert bp_json["result"] == "FAILED"
+    assert "phrase" in (bp_json["reason"] or "").lower()
+
+    # 5. Test Owner with correct face and matching spoken phrase -> MUST SUCCEED
+    owner_good_files = {
+        "video": ("video.webm", io.BytesIO(mock_video), "video/webm"),
+        "face_snapshot": ("snapshot.jpg", io.BytesIO(owner_bytes), "image/jpeg"),
+    }
+    owner_good_data = {
+        "challenge_id": challenge_id,
+        "transcript": phrase,
+    }
+    res_good = client.post("/api/checkins", headers=headers, files=owner_good_files, data=owner_good_data)
+    assert res_good.status_code == 200
+    g_json = res_good.json()
+    assert g_json["result"] == "SUCCESS"
+
+
+
 

@@ -27,10 +27,15 @@ export interface ProfileDetails {
   check_in_frequency?: DurationValue;
   grace_period?: DurationValue;
   medical_hold?: MedicalHoldInfo;
+  has_face_enrolled?: boolean;
 }
 
 export function fetchProfile(): Promise<ProfileDetails> {
   return apiClient.get<ProfileDetails>("/api/profile");
+}
+
+export function reEnrollFace(faceSamples: string[]): Promise<{ ok: boolean; samples_count: number; message: string }> {
+  return apiClient.post("/api/profile/re-enroll-face", { face_samples: faceSamples });
 }
 
 export function updateProfile(patch: { full_name?: string | undefined; phone?: string | undefined }): Promise<ProfileDetails> {

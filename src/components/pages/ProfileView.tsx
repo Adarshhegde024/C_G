@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, Mail, ShieldCheck } from "lucide-react";
+import { CalendarDays, Camera, Mail, Scan, ShieldCheck } from "lucide-react";
 
-import { fetchProfile, updateProfile, type ProfileDetails } from "@/api/profile";
+import { fetchProfile, reEnrollFace, updateProfile, type ProfileDetails } from "@/api/profile";
 import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input, Label } from "@/components/ui/input";
 import { PageLoader, Skeleton } from "@/components/ui/skeleton";
+import { FaceEnrollment } from "@/components/checkin/FaceEnrollment";
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -25,6 +28,8 @@ export function ProfileView() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [isReEnrolling, setIsReEnrolling] = useState(false);
 
   const query = useQuery<ProfileDetails, ApiError>({ queryKey: ["profile"], queryFn: fetchProfile });
 
@@ -131,6 +136,38 @@ export function ProfileView() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Scan className="h-4.5 w-4.5 text-lavender" aria-hidden />
+              Biometric Profile
+            </CardTitle>
+            <CardDescription>
+              Facial recognition baseline for single-owner check-in verification.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Status</span>
+              <Badge variant={data.has_face_enrolled ? "success" : "warning"}>
+                {data.has_face_enrolled ? "Enrolled & Active" : "Action Recommended"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Background walls and ambient room features are filtered out. Only the enrolled face matching this profile can check in.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full mt-2"
+              onClick={() => setEnrollOpen(true)}
+            >
+              <Camera className="mr-2 h-3.5 w-3.5" />
+              {data.has_face_enrolled ? "Update Facial Baseline" : "Enroll Face Profile"}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card className="vault-gradient border-transparent">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-vault-foreground">
@@ -146,6 +183,31 @@ export function ProfileView() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent
+          title="Update Facial Biometric Baseline"
+          description="Capture 5 facial samples. Background walls and furniture will be filtered out."
+          className="max-w-xl"
+        >
+          <FaceEnrollment
+            submitting={isReEnrolling}
+            onComplete={async (samples) => {
+              setIsReEnrolling(true);
+              try {
+                await reEnrollFace(samples);
+                toast.success("Facial biometric profile successfully updated.");
+                queryClient.invalidateQueries({ queryKey: ["profile"] });
+                setEnrollOpen(false);
+              } catch (err) {
+                toast.error(err instanceof ApiError ? err.message : "Failed to update face baseline.");
+              } finally {
+                setIsReEnrolling(false);
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

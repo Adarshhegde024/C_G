@@ -18,9 +18,11 @@ from app.models.schemas import (
     MedicalHold,
     MedicalHoldTogglePayload,
     MedicalHoldResponse,
+    ReEnrollFacePayload,
 )
 from app.database import get_profile_by_id, update_profile
 from app.services.audit import record_audit
+from app.services.biometrics import enroll_faces
 from app.services.checkin_scheduler import calculate_next_deadline
 
 router = APIRouter(prefix="/api/profile", tags=["Profile & Settings"])
@@ -31,6 +33,8 @@ async def get_profile(current_user: AuthUser = Depends(get_current_user)):
     """Returns profile details including check-in parameters and medical hold status."""
     profile = get_profile_by_id(current_user.id) or {}
     med_hold = profile.get("medical_hold") or {"active": False, "start_date": None, "end_date": None, "note": None}
+    face_enc = profile.get("face_encodings") or {}
+    has_face = bool(face_enc.get("enrolled") and len(face_enc.get("template", [])) > 0)
     return {
         "full_name": profile.get("full_name") or current_user.name,
         "email": profile.get("email") or current_user.email,
@@ -41,6 +45,45 @@ async def get_profile(current_user: AuthUser = Depends(get_current_user)):
         "check_in_frequency": profile.get("check_in_frequency") or {"value": 30, "unit": "days"},
         "grace_period": profile.get("grace_period") or {"value": 72, "unit": "hours"},
         "medical_hold": med_hold,
+        "has_face_enrolled": has_face,
+    }
+
+
+@router.post("/re-enroll-face", response_model=Dict[str, Any])
+async def re_enroll_face(
+    payload: ReEnrollFacePayload,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """
+    Re-enrolls the vault owner's facial biometric baseline.
+    Extracts isolated face feature vectors from provided webcam samples,
+    excluding background pixels, and saves the new template to the user's profile.
+    """
+    if not payload.face_samples or len(payload.face_samples) < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one face sample is required for re-enrollment.",
+        )
+
+    template_data = enroll_faces(payload.face_samples)
+    if not template_data.get("enrolled") or not template_data.get("template"):
+        raise HTTPException(
+            status_code=422,
+            detail="Unable to extract face features from the provided samples. Please ensure good lighting and look directly into the camera.",
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update_patch = {
+        "face_encodings": template_data,
+        "updated_at": now_iso,
+    }
+    update_profile(current_user.id, update_patch)
+    record_audit(current_user.id, "BIOMETRIC_PROFILE_UPDATED", "Biometric facial baseline updated via re-enrollment", "SUCCESS")
+
+    return {
+        "ok": True,
+        "samples_count": template_data["samples_count"],
+        "message": "Facial biometric profile successfully updated.",
     }
 
 
