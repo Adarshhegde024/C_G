@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   CalendarClock,
   FolderLock,
   HeartPulse,
+  PlayCircle,
   ShieldCheck,
+  Snowflake,
   Timer,
   UserCheck,
   Users,
@@ -13,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { fetchDashboard } from "@/api/dashboard";
+import { toggleMedicalHold } from "@/api/profile";
 import { useAuth } from "@/auth/AuthProvider";
 import { StatusBadge, statusCopy } from "@/components/dashboard/StatusBadge";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -81,8 +85,22 @@ function useMinuteTick() {
 
 function DashboardPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   useMinuteTick();
   const query = useQuery<DashboardSummary, ApiError>({ queryKey: ["dashboard"], queryFn: fetchDashboard });
+
+  const unfreezeMutation = useMutation({
+    mutationFn: () => toggleMedicalHold({ active: false }),
+    onSuccess: (data) => {
+      toast.success(data.message || "Medical hold deactivated. Vault resumed.");
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["medical-hold"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to resume vault.");
+    },
+  });
 
   if (query.isPending) {
     return (
@@ -119,6 +137,39 @@ function DashboardPage() {
         description="Here's the current state of your vault."
       />
 
+      {/* Medical Hold Freeze Banner */}
+      {data.account_status === "MEDICAL_HOLD" && (
+        <Card className="mb-4 border-lavender/50 bg-gradient-to-r from-lavender/15 via-secondary to-lavender/10 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lavender/20 text-lavender">
+                <Snowflake className="h-5 w-5 animate-pulse" aria-hidden />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-semibold text-foreground text-base">Vault Frozen — Medical Hold Active</h3>
+                  <span className="rounded-full bg-lavender/20 px-2.5 py-0.5 text-xs font-medium text-lavender">Deadlines Paused</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground max-w-xl">
+                  All check-in countdowns, grace periods, and nominee document releases are paused. Your documents remain completely private and encrypted.
+                  {data.medical_hold?.note ? ` Note: "${data.medical_hold.note}"` : ""}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="accent"
+              size="sm"
+              className="gap-2 shrink-0 sm:self-center"
+              disabled={unfreezeMutation.isPending}
+              onClick={() => unfreezeMutation.mutate()}
+            >
+              <PlayCircle className="h-4 w-4" aria-hidden />
+              {unfreezeMutation.isPending ? "Resuming…" : "Resume Vault"}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Status banner */}
       <Card className="mb-4 vault-gradient border-transparent p-6 text-vault-foreground">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -142,25 +193,46 @@ function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-              <Video className="h-5 w-5" aria-hidden />
+              {data.account_status === "MEDICAL_HOLD" ? (
+                <Snowflake className="h-5 w-5 text-lavender" aria-hidden />
+              ) : (
+                <Video className="h-5 w-5" aria-hidden />
+              )}
             </span>
             <div>
-              <p className="font-display text-base font-semibold">Your next check-in</p>
+              <p className="font-display text-base font-semibold">
+                {data.account_status === "MEDICAL_HOLD" ? "Check-in paused (Medical hold active)" : "Your next check-in"}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {remaining
-                  ? `Due in ${remaining.replace(" remaining", "")}.`
-                  : "The next check-in deadline will appear once your backend reports it."}
+                {data.account_status === "MEDICAL_HOLD"
+                  ? "Deadlines are paused while your account is frozen. You do not need to check in."
+                  : remaining
+                    ? `Due in ${remaining.replace(" remaining", "")}.`
+                    : "The next check-in deadline will appear once your backend reports it."}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Last successful check-in: {formatDateTime(data.last_check_in_at)}
               </p>
             </div>
           </div>
-          <Link to="/check-in">
-            <Button variant="accent" size="lg" className="w-full sm:w-auto">
-              Complete check-in
+          {data.account_status === "MEDICAL_HOLD" ? (
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full sm:w-auto gap-2 text-lavender border-lavender/40 hover:bg-lavender/10"
+              disabled={unfreezeMutation.isPending}
+              onClick={() => unfreezeMutation.mutate()}
+            >
+              <PlayCircle className="h-4 w-4" aria-hidden />
+              {unfreezeMutation.isPending ? "Resuming…" : "Resume check-ins"}
             </Button>
-          </Link>
+          ) : (
+            <Link to="/check-in">
+              <Button variant="accent" size="lg" className="w-full sm:w-auto">
+                Complete check-in
+              </Button>
+            </Link>
+          )}
         </div>
       </Card>
 
@@ -211,15 +283,35 @@ function DashboardPage() {
           </CardHeader>
           <CardContent>
             {data.medical_hold?.active ? (
-              <>
+              <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">Document releases are temporarily frozen.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {data.medical_hold.start_date ? `From ${formatDateTime(data.medical_hold.start_date)}` : ""}
                   {data.medical_hold.end_date ? ` until ${formatDateTime(data.medical_hold.end_date)}` : ""}
                 </p>
-              </>
+                <div className="pt-2 flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8 gap-1.5 text-lavender hover:bg-lavender/10"
+                    disabled={unfreezeMutation.isPending}
+                    onClick={() => unfreezeMutation.mutate()}
+                  >
+                    <PlayCircle className="h-3.5 w-3.5" />
+                    Resume vault
+                  </Button>
+                  <Link to="/settings" className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline">
+                    Settings &rarr;
+                  </Link>
+                </div>
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No medical hold is active on your account.</p>
+              <div>
+                <p className="text-sm text-muted-foreground">No medical hold is active on your account.</p>
+                <Link to="/settings" className="mt-3 inline-block text-sm font-semibold text-lavender hover:underline">
+                  Configure medical hold &rarr;
+                </Link>
+              </div>
             )}
           </CardContent>
         </Card>

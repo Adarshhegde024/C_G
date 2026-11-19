@@ -53,6 +53,19 @@ export function fetchMedicalHold(): Promise<MedicalHoldInfo> {
   return apiClient.get<MedicalHoldInfo>("/api/profile/medical-hold");
 }
 
-export function toggleMedicalHold(payload: { active: boolean; note?: string }): Promise<MedicalHoldResponse> {
+export function toggleMedicalHold(payload: {
+  active: boolean;
+  note?: string;
+  duration_days?: number;
+  end_date?: string;
+}): Promise<MedicalHoldResponse> {
   return apiClient.post<MedicalHoldResponse>("/api/profile/medical-hold", payload);
+}
+
+export function simulateMissedCheckIn(): Promise<{ status: string; action_result: any }> {
+  return apiClient.post("/api/checkins/simulate-missed");
+}
+
+export function simulateGraceExpired(): Promise<{ status: string; action_result: any }> {
+  return apiClient.post("/api/checkins/simulate-grace-expired");
 }

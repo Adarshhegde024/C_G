@@ -58,11 +58,28 @@ def evaluate_account_status(
     # Check medical hold first
     med_hold = profile.get("medical_hold") or {}
     if med_hold.get("active"):
-        return (
-            "MEDICAL_HOLD",
-            "Document releases are temporarily frozen due to an active medical hold.",
-            None,
-        )
+        end_date_str = med_hold.get("end_date")
+        if end_date_str:
+            try:
+                end_dt = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) < end_dt:
+                    return (
+                        "MEDICAL_HOLD",
+                        "Document releases are temporarily frozen due to an active medical hold.",
+                        None,
+                    )
+            except Exception:
+                return (
+                    "MEDICAL_HOLD",
+                    "Document releases are temporarily frozen due to an active medical hold.",
+                    None,
+                )
+        else:
+            return (
+                "MEDICAL_HOLD",
+                "Document releases are temporarily frozen due to an active medical hold.",
+                None,
+            )
 
     # Check deadlines
     next_deadline_str = profile.get("next_check_in_deadline")
@@ -124,10 +141,37 @@ def process_owner_deadline(owner_id: str) -> Optional[Dict[str, Any]]:
     if not owner or owner.get("role") != "owner":
         return None
 
-    # Skip if under medical hold
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    # Skip or auto-unfreeze if under medical hold
     med_hold = owner.get("medical_hold") or {}
     if med_hold.get("active"):
-        return {"action": "skipped_medical_hold", "owner_id": owner_id}
+        end_date_str = med_hold.get("end_date")
+        if end_date_str:
+            try:
+                end_dt = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+                if now >= end_dt:
+                    # Automatically unfreeze expired hold
+                    freq_dict = owner.get("check_in_frequency") or {"value": 30, "unit": "days"}
+                    freq = DurationValue(**freq_dict)
+                    new_deadline = calculate_next_deadline(now, freq)
+                    update_profile(owner_id, {
+                        "medical_hold": {"active": False, "start_date": None, "end_date": now_iso, "note": None},
+                        "account_status": "ACTIVE",
+                        "last_check_in_at": now_iso,
+                        "next_check_in_deadline": new_deadline.isoformat(),
+                        "missed_checkin_alerted_at": None,
+                        "grace_expired_alerted_at": None,
+                        "updated_at": now_iso,
+                    })
+                    record_audit(owner_id, "MEDICAL_HOLD_EXPIRED", "Scheduled medical hold concluded. Vault check-in deadlines resumed fresh.", "INFO")
+                else:
+                    return {"action": "skipped_medical_hold", "owner_id": owner_id}
+            except Exception:
+                return {"action": "skipped_medical_hold", "owner_id": owner_id}
+        else:
+            return {"action": "skipped_medical_hold", "owner_id": owner_id}
 
     deadline_str = owner.get("next_check_in_deadline")
     if not deadline_str:

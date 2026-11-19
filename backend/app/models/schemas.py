@@ -86,6 +86,8 @@ class MedicalHold(BaseModel):
 class MedicalHoldTogglePayload(BaseModel):
     active: bool
     note: Optional[str] = None
+    end_date: Optional[str] = None
+    duration_days: Optional[int] = None
 
 
 class MedicalHoldResponse(BaseModel):

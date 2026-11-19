@@ -187,10 +187,14 @@ async def toggle_medical_hold(
     now_iso = now.isoformat()
 
     if payload.active:
+        end_date_str = payload.end_date
+        if payload.duration_days and payload.duration_days > 0:
+            end_date_str = (now + timedelta(days=payload.duration_days)).isoformat()
+
         med_hold_data = {
             "active": True,
             "start_date": now_iso,
-            "end_date": None,
+            "end_date": end_date_str,
             "note": payload.note.strip() if payload.note else None,
         }
         patch = {
@@ -203,13 +207,13 @@ async def toggle_medical_hold(
         return MedicalHoldResponse(
             active=True,
             start_date=now_iso,
-            end_date=None,
+            end_date=end_date_str,
             note=med_hold_data["note"],
             account_status="MEDICAL_HOLD",
             message="Vault is now frozen under medical hold. Check-in deadlines and document releases are paused.",
         )
     else:
-        # Deactivating hold: recalculate deadline fresh from now
+        # Deactivating hold: recalculate deadline fresh from now and clear any alert flags
         freq_dict = profile.get("check_in_frequency") or {"value": 30, "unit": "days"}
         freq = DurationValue(**freq_dict)
         new_deadline = calculate_next_deadline(now, freq)
@@ -225,10 +229,12 @@ async def toggle_medical_hold(
             "account_status": "ACTIVE",
             "last_check_in_at": now_iso,
             "next_check_in_deadline": new_deadline.isoformat(),
+            "missed_checkin_alerted_at": None,
+            "grace_expired_alerted_at": None,
             "updated_at": now_iso,
         }
         update_profile(current_user.id, patch)
-        record_audit(current_user.id, "MEDICAL_HOLD_DEACTIVATED", "Deactivated medical hold. Vault check-in deadlines resumed.", "SUCCESS")
+        record_audit(current_user.id, "MEDICAL_HOLD_DEACTIVATED", "Deactivated medical hold. Vault check-in deadlines resumed fresh.", "SUCCESS")
         return MedicalHoldResponse(
             active=False,
             start_date=None,

@@ -87,6 +87,7 @@ export function CheckInPage() {
   // Real-time Audio Activity Analyser state
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [voiceDetected, setVoiceDetected] = useState<boolean>(false);
+  const voiceDetectedRef = useRef<boolean>(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -184,7 +185,24 @@ export function CheckInPage() {
     setSpokenWords(new Set());
     setAudioLevel(0);
     setVoiceDetected(false);
+    voiceDetectedRef.current = false;
     voiceActivityCountRef.current = 0;
+
+    // Pre-initialize and resume Web Audio AudioContext during direct user tap gesture
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx();
+        }
+        if (audioContextRef.current.state === "suspended") {
+          audioContextRef.current.resume().catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("Could not pre-activate AudioContext:", e);
+    }
+
     setStage("countdown");
   }
 
@@ -212,7 +230,7 @@ export function CheckInPage() {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const audioTracks = stream.getAudioTracks();
       if (AudioCtx && audioTracks.length > 0) {
-        const ctx = new AudioCtx();
+        const ctx = audioContextRef.current || new AudioCtx();
         if (ctx.state === "suspended") {
           ctx.resume().catch(() => {});
         }
@@ -236,14 +254,15 @@ export function CheckInPage() {
             sum += dataArray[i];
           }
           const average = sum / dataArray.length;
-          const normalized = Math.min(1, average / 80);
+          const normalized = Math.min(1, average / 60);
           setAudioLevel(normalized);
 
-          // Human speech energy threshold
-          if (average > 8) {
+          // Human speech energy threshold (mobile microphone calibrated)
+          if (average > 3) {
             voiceActivityCountRef.current += 1;
-            if (voiceActivityCountRef.current >= 4) {
+            if (voiceActivityCountRef.current >= 2) {
               setVoiceDetected(true);
+              voiceDetectedRef.current = true;
             }
           }
 
@@ -284,8 +303,9 @@ export function CheckInPage() {
               .filter(Boolean)
           );
           setSpokenWords(matched);
-          if (text.length > 4) {
+          if (text.length > 2) {
             setVoiceDetected(true);
+            voiceDetectedRef.current = true;
           }
         };
 
@@ -341,7 +361,11 @@ export function CheckInPage() {
 
   async function uploadAndVerify(video: Blob) {
     setStage("verifying");
-    const isVocalDetected = voiceDetected || voiceActivityCountRef.current >= 3 || Boolean(transcript.trim());
+    const isVocalDetected =
+      voiceDetectedRef.current ||
+      voiceDetected ||
+      voiceActivityCountRef.current >= 2 ||
+      Boolean(transcript.trim());
 
     try {
       const response = await submitCheckIn({

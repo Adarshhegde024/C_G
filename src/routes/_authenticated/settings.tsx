@@ -3,11 +3,15 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   Bell,
+  Calendar,
   CheckCircle2,
   LogOut,
+  MailCheck,
   PauseCircle,
   PlayCircle,
+  Send,
   ShieldAlert,
   Snowflake,
   Timer,
@@ -17,6 +21,8 @@ import {
   fetchProfile,
   updateSecuritySettings,
   toggleMedicalHold,
+  simulateMissedCheckIn,
+  simulateGraceExpired,
   type ProfileDetails,
   type MedicalHoldInfo,
 } from "@/api/profile";
@@ -138,6 +144,8 @@ function SettingsPage() {
   const [grace, setGrace] = useState<DurationValue>({ value: 72, unit: "hours" });
   const [prefs, setPrefs] = useState(readPrefs);
   const [holdNote, setHoldNote] = useState("");
+  const [holdDurationOption, setHoldDurationOption] = useState<string>("14");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   const query = useQuery<ProfileDetails, ApiError>({
     queryKey: ["profile"],
@@ -163,7 +171,8 @@ function SettingsPage() {
   });
 
   const medicalHoldMutation = useMutation({
-    mutationFn: (variables: { active: boolean; note?: string }) => toggleMedicalHold(variables),
+    mutationFn: (variables: { active: boolean; note?: string; duration_days?: number; end_date?: string }) =>
+      toggleMedicalHold(variables),
     onSuccess: (res) => {
       toast.success(res.message);
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -173,6 +182,26 @@ function SettingsPage() {
       }
     },
     onError: (err: ApiError) => toast.error(err.message),
+  });
+
+  const simulateMissedMutation = useMutation({
+    mutationFn: simulateMissedCheckIn,
+    onSuccess: () => {
+      toast.success("Missed check-in alert dispatched! Check your email and nominee inbox.");
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (err: any) => toast.error(err.message || "Simulation failed."),
+  });
+
+  const simulateGraceMutation = useMutation({
+    mutationFn: simulateGraceExpired,
+    onSuccess: () => {
+      toast.success("Grace period expiration notice sent! Nominee verification case eligible.");
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (err: any) => toast.error(err.message || "Simulation failed."),
   });
 
   function updatePref(key: keyof typeof prefs, value: boolean) {
@@ -280,6 +309,34 @@ function SettingsPage() {
                       If you anticipate being unable to check in due to scheduled surgery, medical recovery, or lack of internet, activate a freeze. You can unfreeze anytime.
                     </p>
                     <div className="space-y-1.5">
+                      <Label htmlFor="hold-duration">Freeze duration</Label>
+                      <Select
+                        id="hold-duration"
+                        value={holdDurationOption}
+                        onChange={(e) => setHoldDurationOption(e.target.value)}
+                      >
+                        <option value="7">7 Days (Short medical recovery)</option>
+                        <option value="14">14 Days (Standard hospitalization)</option>
+                        <option value="30">30 Days (Extended treatment / travel)</option>
+                        <option value="custom">Custom end date</option>
+                        <option value="indefinite">Indefinite (Until manually resumed)</option>
+                      </Select>
+                    </div>
+
+                    {holdDurationOption === "custom" && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="custom-end-date">Hold end date</Label>
+                        <Input
+                          id="custom-end-date"
+                          type="date"
+                          value={customEndDate}
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
                       <Label htmlFor="hold-note">Hold reason / note (optional)</Label>
                       <Input
                         id="hold-note"
@@ -290,9 +347,25 @@ function SettingsPage() {
                     </div>
                     <Button
                       variant="outline"
-                      className="gap-2 text-lavender hover:bg-lavender/10"
+                      className="gap-2 text-lavender hover:bg-lavender/10 w-full sm:w-auto"
                       disabled={medicalHoldMutation.isPending}
-                      onClick={() => medicalHoldMutation.mutate({ active: true, note: holdNote })}
+                      onClick={() => {
+                        const durationDays =
+                          holdDurationOption === "indefinite" || holdDurationOption === "custom"
+                            ? undefined
+                            : parseInt(holdDurationOption, 10);
+                        const endDate =
+                          holdDurationOption === "custom" && customEndDate
+                            ? new Date(customEndDate).toISOString()
+                            : undefined;
+
+                        medicalHoldMutation.mutate({
+                          active: true,
+                          note: holdNote,
+                          duration_days: durationDays,
+                          end_date: endDate,
+                        });
+                      }}
                     >
                       <PauseCircle className="h-4 w-4" aria-hidden />
                       {medicalHoldMutation.isPending ? "Freezing…" : "Activate Medical Hold (Freeze Vault)"}
@@ -334,6 +407,59 @@ function SettingsPage() {
                   checked={prefs.releases}
                   onChange={(v) => updatePref("releases", v)}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Missed Check-in & Dual Email Alert Diagnostics */}
+            <Card className="border-lavender/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MailCheck className="h-4.5 w-4.5 text-lavender" aria-hidden />
+                  Email Alerts & Check-In Simulation
+                </CardTitle>
+                <CardDescription>
+                  Verify that dual email notifications are dispatched properly to your inbox and your nominee's inbox without waiting 30 days.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-xl border border-border bg-secondary/50 p-4 space-y-2">
+                  <p className="text-xs font-medium text-foreground">Live Delivery Guarantee</p>
+                  <p className="text-xs text-muted-foreground">
+                    When a check-in is missed, CloudGuard triggers immediate dual alerts via transactional SMTP to both the registered vault owner and their active nominee.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    className="h-auto py-3 px-4 flex flex-col items-start text-left gap-1 border-lavender/30 hover:bg-lavender/10"
+                    disabled={simulateMissedMutation.isPending}
+                    onClick={() => simulateMissedMutation.mutate()}
+                  >
+                    <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                      <Send className="h-3.5 w-3.5 text-lavender" />
+                      Test Missed Alert
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {simulateMissedMutation.isPending ? "Sending alerts…" : "Sends dual Stage-1 emails to Owner & Nominee."}
+                    </span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="h-auto py-3 px-4 flex flex-col items-start text-left gap-1 border-amber-500/30 hover:bg-amber-500/10"
+                    disabled={simulateGraceMutation.isPending}
+                    onClick={() => simulateGraceMutation.mutate()}
+                  >
+                    <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      Test Grace Expired
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {simulateGraceMutation.isPending ? "Simulating…" : "Sends Stage-2 expiration alert & opens nominee case."}
+                    </span>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
