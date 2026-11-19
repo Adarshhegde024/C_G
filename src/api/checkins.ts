@@ -28,6 +28,7 @@ export function submitCheckIn(params: {
   faceSnapshot?: Blob;
   challengeId?: string;
   transcript?: string;
+  voiceDetected?: boolean;
 }): Promise<SubmitCheckInResult> {
   const formData = new FormData();
   formData.append("video", params.video, "check-in.webm");
@@ -39,6 +40,9 @@ export function submitCheckIn(params: {
   }
   if (params.transcript) {
     formData.append("transcript", params.transcript);
+  }
+  if (params.voiceDetected !== undefined) {
+    formData.append("voice_detected", String(params.voiceDetected));
   }
   return apiClient.postForm<SubmitCheckInResult>("/api/checkins", formData);
 }

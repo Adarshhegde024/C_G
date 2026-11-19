@@ -82,16 +82,22 @@ async def submit_checkin(
     face_snapshot: Optional[UploadFile] = File(None),
     challenge_id: Optional[str] = Form(None),
     transcript: Optional[str] = Form(None),
+    voice_detected: Optional[str] = Form(None),
     current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Receives live biometric video recording, optional high-resolution face snapshot,
-    dynamic challenge token, and real-time speech transcript.
+    dynamic challenge token, real-time speech transcript, and voice energy detection status.
     Performs background-independent facial feature verification, dynamic speech verification,
     and liveness motion detection.
     """
     video_bytes = await video.read()
     snapshot_bytes = await face_snapshot.read() if face_snapshot else None
+
+    # Parse voice_detected flag
+    is_voice_detected = None
+    if voice_detected is not None:
+        is_voice_detected = str(voice_detected).strip().lower() in ["true", "1", "yes"]
 
     supabase = get_supabase()
     profile = get_profile_by_id(current_user.id) or {}
@@ -104,6 +110,7 @@ async def submit_checkin(
         face_snapshot_bytes=snapshot_bytes,
         challenge_id=challenge_id,
         transcript=transcript,
+        voice_detected=is_voice_detected,
     )
 
     now = datetime.now(timezone.utc)

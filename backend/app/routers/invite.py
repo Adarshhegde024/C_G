@@ -19,6 +19,7 @@ from app.database import (
     update_nominee,
     update_recipient,
     create_profile,
+    update_profile,
 )
 from app.dependencies import create_access_token
 from app.models.schemas import (
@@ -178,6 +179,9 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     existing_profile = get_profile_by_email(target_email)
     if existing_profile:
         profile_id = str(existing_profile["id"])
+        if payload.password and not existing_profile.get("password_hash"):
+            hashed_pwd = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            update_profile(profile_id, {"password_hash": hashed_pwd, "updated_at": now_iso})
     else:
         profile_id = str(uuid.uuid4())
         hashed_pwd = None

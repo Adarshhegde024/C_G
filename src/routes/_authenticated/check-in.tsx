@@ -84,6 +84,17 @@ export function CheckInPage() {
   const [spokenWords, setSpokenWords] = useState<Set<string>>(new Set());
   const [speechSupported, setSpeechSupported] = useState(false);
 
+  // Real-time Audio Activity Analyser state
+  const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [voiceDetected, setVoiceDetected] = useState<boolean>(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const voiceActivityCountRef = useRef<number>(0);
+
+  const stageRef = useRef<Stage>("permission");
+  stageRef.current = stage;
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -136,8 +147,24 @@ export function CheckInPage() {
     return () => clearInterval(id);
   }, [stage]);
 
+  // Cleanup helper for Web Audio analyser
+  function stopAudioAnalyser() {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch {}
+      audioContextRef.current = null;
+    }
+    setAudioLevel(0);
+  }
+
   useEffect(() => () => {
     stop();
+    stopAudioAnalyser();
     if (speechRecognitionRef.current) {
       try {
         speechRecognitionRef.current.stop();
@@ -155,6 +182,9 @@ export function CheckInPage() {
     setElapsed(0);
     setTranscript("");
     setSpokenWords(new Set());
+    setAudioLevel(0);
+    setVoiceDetected(false);
+    voiceActivityCountRef.current = 0;
     setStage("countdown");
   }
 
@@ -177,7 +207,55 @@ export function CheckInPage() {
       console.warn("Could not capture initial face snapshot:", e);
     }
 
-    // Start live Speech Recognition if supported in user's browser
+    // 1. Initialize Web Audio API Real-Time Voice Analyser (Universal Mobile & Desktop Support)
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioTracks = stream.getAudioTracks();
+      if (AudioCtx && audioTracks.length > 0) {
+        const ctx = new AudioCtx();
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
+        }
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        audioContextRef.current = ctx;
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        voiceActivityCountRef.current = 0;
+
+        const checkAudio = () => {
+          if (stageRef.current !== "recording") return;
+          analyser.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          const normalized = Math.min(1, average / 80);
+          setAudioLevel(normalized);
+
+          // Human speech energy threshold
+          if (average > 8) {
+            voiceActivityCountRef.current += 1;
+            if (voiceActivityCountRef.current >= 4) {
+              setVoiceDetected(true);
+            }
+          }
+
+          animFrameRef.current = requestAnimationFrame(checkAudio);
+        };
+        animFrameRef.current = requestAnimationFrame(checkAudio);
+      }
+    } catch (err) {
+      console.warn("Web Audio API analyser init warning:", err);
+    }
+
+    // 2. Start Progressive Speech Recognition (if supported in current browser)
     const SpeechConstructor =
       typeof window !== "undefined"
         ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -206,6 +284,9 @@ export function CheckInPage() {
               .filter(Boolean)
           );
           setSpokenWords(matched);
+          if (text.length > 4) {
+            setVoiceDetected(true);
+          }
         };
 
         recognition.onerror = (e: any) => {
@@ -235,6 +316,7 @@ export function CheckInPage() {
             faceSnapshotBlobRef.current = dataURLtoBlob(captureFrame(videoRef.current, 640));
           } catch {}
         }
+        stopAudioAnalyser();
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         void uploadAndVerify(blob);
       };
@@ -259,12 +341,15 @@ export function CheckInPage() {
 
   async function uploadAndVerify(video: Blob) {
     setStage("verifying");
+    const isVocalDetected = voiceDetected || voiceActivityCountRef.current >= 3 || Boolean(transcript.trim());
+
     try {
       const response = await submitCheckIn({
         video,
         faceSnapshot: faceSnapshotBlobRef.current ?? undefined,
         challengeId: challenge?.challenge_id,
         transcript: transcript.trim() || undefined,
+        voiceDetected: isVocalDetected,
       });
 
       setResult(response);
@@ -297,11 +382,15 @@ export function CheckInPage() {
 
   function resetFlow() {
     stop();
+    stopAudioAnalyser();
     setResult(null);
     setSubmitError(null);
     setElapsed(0);
     setTranscript("");
     setSpokenWords(new Set());
+    setAudioLevel(0);
+    setVoiceDetected(false);
+    voiceActivityCountRef.current = 0;
     faceSnapshotBlobRef.current = null;
     void refetchChallenge();
     setStage("positioning");
@@ -326,15 +415,10 @@ export function CheckInPage() {
                 <Volume2 className="h-4 w-4 animate-pulse text-lavender" />
                 Spoken Phrase Challenge
               </span>
-              {speechSupported ? (
-                <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-500 text-[10px]">
-                  <Mic className="mr-1 h-3 w-3" /> Live speech detection active
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                  Microphone audio active
-                </Badge>
-              )}
+              <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-500 text-[10px]">
+                <Mic className="mr-1 h-3 w-3" />
+                {speechSupported ? "Live speech & audio detection" : "Live microphone active"}
+              </Badge>
             </div>
 
             <p className="text-xs text-muted-foreground mb-3">
@@ -367,6 +451,48 @@ export function CheckInPage() {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Live Audio Activity / Waveform Bar */}
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-vault/60 px-3 py-2 border border-border/80">
+              <div className="flex items-center gap-1">
+                {[35, 65, 95, 60, 85, 50, 90, 65, 45, 80].map((h, i) => {
+                  const barHeight =
+                    stage === "recording"
+                      ? Math.max(4, Math.round((h * (audioLevel * 1.5 + 0.1)) / 4) * 4)
+                      : 4;
+                  const isActive = audioLevel > 0.08 || voiceDetected;
+                  return (
+                    <div
+                      key={i}
+                      className={`w-1 rounded-full transition-all duration-75 ${
+                        isActive ? "bg-emerald-400" : "bg-muted-foreground/30"
+                      }`}
+                      style={{ height: `${Math.min(22, Math.max(4, barHeight))}px` }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex-1 text-xs">
+                {stage === "recording" ? (
+                  voiceDetected || audioLevel > 0.08 ? (
+                    <span className="font-medium text-emerald-400 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                      Voice detected — keep speaking the phrase!
+                    </span>
+                  ) : (
+                    <span className="text-vault-muted flex items-center gap-1.5">
+                      <Mic className="h-3.5 w-3.5 text-lavender animate-pulse" />
+                      Microphone active — speak the prompt phrase aloud now
+                    </span>
+                  )
+                ) : (
+                  <span className="text-vault-muted flex items-center gap-1.5">
+                    <Mic className="h-3.5 w-3.5 text-muted-foreground" />
+                    Microphone ready for phrase reading
+                  </span>
+                )}
+              </div>
             </div>
 
             {transcript ? (
@@ -422,7 +548,11 @@ export function CheckInPage() {
 
                 <div className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-vault/80 backdrop-blur-sm px-3 py-1.5 text-xs font-medium text-vault-foreground border border-white/10">
                   <Mic className="h-3.5 w-3.5 text-lavender" aria-hidden />
-                  Mic ready
+                  {voiceDetected || audioLevel > 0.08 ? (
+                    <span className="text-emerald-400 font-semibold">Audio active</span>
+                  ) : (
+                    "Mic ready"
+                  )}
                 </div>
               </>
             ) : null}
@@ -488,7 +618,7 @@ export function CheckInPage() {
                 <p className="text-sm">
                   {status === "starting"
                     ? "Requesting camera and microphone access…"
-                    : cameraError ?? "Allow camera and microphone access to complete your check-in."}
+                    : cameraError ?? "Allow camera and microphone access in your browser or device settings to complete check-in."}
                 </p>
                 {status !== "starting" ? (
                   <Button
@@ -567,7 +697,7 @@ export function CheckInPage() {
               <div className="flex items-start gap-2.5 rounded-lg bg-secondary/80 p-3 text-xs text-secondary-foreground border border-border">
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
                 <p>
-                  Single-owner security enforcement: Check-in is only approved when the face matches the registered account owner and the dynamic phrase is spoken aloud. Other individuals attempting to check in will be blocked.
+                  Single-owner security enforcement: Check-in is only approved when the face matches the registered account owner and voice activity is confirmed. Other individuals attempting to check in will be blocked.
                 </p>
               </div>
             ) : null}

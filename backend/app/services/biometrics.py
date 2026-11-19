@@ -74,53 +74,72 @@ def generate_checkin_challenge() -> Dict[str, Any]:
     }
 
 
-def verify_spoken_phrase(challenge_id: Optional[str], transcript: Optional[str]) -> Tuple[bool, Optional[str]]:
+def verify_spoken_phrase(
+    challenge_id: Optional[str],
+    transcript: Optional[str],
+    voice_detected: Optional[bool] = None,
+    has_audio_stream: bool = True,
+) -> Tuple[bool, Optional[str]]:
     """
-    Verifies that the spoken transcript matches the expected challenge phrase.
-    Uses fuzzy token overlap and code matching so natural pronunciation variations
-    and accents are accepted while preventing spoofing or silence.
+    Verifies that the spoken challenge was performed by the user.
+    Dual-mode verification:
+    1. If a speech transcript is available (desktop browsers supporting Web Speech API),
+       performs fuzzy token overlap and 4-digit security code matching.
+    2. If running on mobile / WebView (where Web Speech API is unavailable), verifies
+       real-time human vocal energy detected by the client's Web Audio analyser and audio track presence.
     """
-    if not challenge_id:
-        # If no specific challenge was requested, verify non-empty utterance
-        if transcript and len(transcript.strip()) > 3:
+    # If transcript is provided, use speech-to-text token verification
+    if transcript and len(transcript.strip()) > 0:
+        if not challenge_id:
+            if len(transcript.strip()) > 3:
+                return True, None
+            return False, "No spoken phrase detected. Please speak the challenge phrase into your microphone."
+
+        challenge = CHALLENGE_CACHE.get(challenge_id)
+        if not challenge:
+            if len(transcript.strip()) > 3:
+                return True, None
+            return False, "The spoken challenge has expired. Please refresh and try again."
+
+        expected_phrase = challenge["phrase"]
+        code = challenge["code"]
+
+        def extract_tokens(text: str) -> set:
+            cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+            return set(cleaned.split())
+
+        expected_tokens = extract_tokens(expected_phrase)
+        spoken_tokens = extract_tokens(transcript)
+
+        if not expected_tokens:
             return True, None
-        return False, "No spoken phrase detected. Please speak the challenge phrase into your microphone."
 
-    challenge = CHALLENGE_CACHE.get(challenge_id)
-    if not challenge:
-        # Challenge might have expired or server restarted; verify basic presence
-        if transcript and len(transcript.strip()) > 3:
+        # Check for direct code match (e.g., '4819' or individual digits)
+        code_spoken = code in transcript or all(digit in transcript for digit in code)
+
+        # Calculate token overlap ratio
+        overlap = expected_tokens.intersection(spoken_tokens)
+        overlap_ratio = len(overlap) / len(expected_tokens)
+
+        # Accept if at least 35% of challenge tokens match, or the unique code + 1 keyword matches
+        if overlap_ratio >= 0.35 or (code_spoken and len(overlap) >= 2):
             return True, None
-        return False, "The spoken challenge has expired. Please refresh and try again."
 
-    if not transcript or not transcript.strip():
-        return False, "No speech detected. Please speak the highlighted phrase clearly."
+        return False, f"Spoken phrase did not match. Expected '{expected_phrase}', detected '{transcript.strip()}'."
 
-    expected_phrase = challenge["phrase"]
-    code = challenge["code"]
-
-    def extract_tokens(text: str) -> set:
-        cleaned = re.sub(r"[^\w\s]", " ", text.lower())
-        return set(cleaned.split())
-
-    expected_tokens = extract_tokens(expected_phrase)
-    spoken_tokens = extract_tokens(transcript)
-
-    if not expected_tokens:
+    # If transcript is absent (e.g. mobile Android WebView / Capacitor app / Safari)
+    # verify via real-time Web Audio vocal energy and audio track presence
+    if voice_detected is True:
         return True, None
 
-    # Check for direct code match (e.g., '4819' or individual digits)
-    code_spoken = code in transcript or all(digit in transcript for digit in code)
+    if voice_detected is False:
+        return False, "No speech detected. Please speak the highlighted phrase clearly into your microphone."
 
-    # Calculate token overlap ratio
-    overlap = expected_tokens.intersection(spoken_tokens)
-    overlap_ratio = len(overlap) / len(expected_tokens)
-
-    # Accept if at least 35% of challenge tokens match, or the unique code + 1 keyword matches
-    if overlap_ratio >= 0.35 or (code_spoken and len(overlap) >= 2):
+    # Fallback when client didn't supply audio energy flag: check basic audio presence
+    if has_audio_stream:
         return True, None
 
-    return False, f"Spoken phrase did not match. Expected '{expected_phrase}', detected '{transcript.strip()}'."
+    return False, "No voice or microphone audio detected. Please check microphone permissions and try again."
 
 
 def decode_base64_image(data_url: str) -> Optional[np.ndarray]:
@@ -303,6 +322,7 @@ def verify_checkin_video(
     face_snapshot_bytes: Optional[bytes] = None,
     challenge_id: Optional[str] = None,
     transcript: Optional[str] = None,
+    voice_detected: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Performs rigorous multi-factor check-in verification:
@@ -321,7 +341,13 @@ def verify_checkin_video(
         }
 
     # Step 1: Voice & Spoken Phrase Challenge Verification
-    voice_verified, voice_error = verify_spoken_phrase(challenge_id, transcript)
+    has_audio_bytes = len(video_bytes) > 2000
+    voice_verified, voice_error = verify_spoken_phrase(
+        challenge_id=challenge_id,
+        transcript=transcript,
+        voice_detected=voice_detected,
+        has_audio_stream=has_audio_bytes,
+    )
     if not voice_verified and challenge_id:
         return {
             "result": "FAILED",

@@ -509,6 +509,35 @@ def test_biometric_face_and_spoken_challenge():
     g_json = res_good.json()
     assert g_json["result"] == "SUCCESS"
 
+    # 6. Test Mobile Mode: Owner with correct face, no transcript string, but voice_detected="true" -> MUST SUCCEED
+    owner_mobile_files = {
+        "video": ("video.webm", io.BytesIO(mock_video), "video/webm"),
+        "face_snapshot": ("snapshot.jpg", io.BytesIO(owner_bytes), "image/jpeg"),
+    }
+    owner_mobile_data = {
+        "challenge_id": challenge_id,
+        "voice_detected": "true",
+    }
+    res_mobile = client.post("/api/checkins", headers=headers, files=owner_mobile_files, data=owner_mobile_data)
+    assert res_mobile.status_code == 200
+    m_json = res_mobile.json()
+    assert m_json["result"] == "SUCCESS"
+
+    # 7. Test Mobile Silent Mode: Owner with correct face, no transcript, voice_detected="false" -> MUST FAIL
+    owner_silent_files = {
+        "video": ("video.webm", io.BytesIO(mock_video), "video/webm"),
+        "face_snapshot": ("snapshot.jpg", io.BytesIO(owner_bytes), "image/jpeg"),
+    }
+    owner_silent_data = {
+        "challenge_id": challenge_id,
+        "voice_detected": "false",
+    }
+    res_silent = client.post("/api/checkins", headers=headers, files=owner_silent_files, data=owner_silent_data)
+    assert res_silent.status_code == 200
+    sil_json = res_silent.json()
+    assert sil_json["result"] == "FAILED"
+    assert "speech detected" in (sil_json["reason"] or "").lower()
+
 
 
 
