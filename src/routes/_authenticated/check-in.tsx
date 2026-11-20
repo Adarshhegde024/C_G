@@ -92,6 +92,7 @@ export function CheckInPage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const voiceActivityCountRef = useRef<number>(0);
+  const isRecordingRef = useRef<boolean>(false);
 
   const stageRef = useRef<Stage>("permission");
   stageRef.current = stage;
@@ -150,6 +151,7 @@ export function CheckInPage() {
 
   // Cleanup helper for Web Audio analyser
   function stopAudioAnalyser() {
+    isRecordingRef.current = false;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -226,6 +228,7 @@ export function CheckInPage() {
     }
 
     // 1. Initialize Web Audio API Real-Time Voice Analyser (Universal Mobile & Desktop Support)
+    isRecordingRef.current = true;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const audioTracks = stream.getAudioTracks();
@@ -246,27 +249,29 @@ export function CheckInPage() {
         voiceActivityCountRef.current = 0;
 
         const checkAudio = () => {
-          if (stageRef.current !== "recording") return;
+          if (!isRecordingRef.current) return;
           analyser.getByteFrequencyData(dataArray);
 
           let sum = 0;
+          let peak = 0;
           for (let i = 0; i < dataArray.length; i++) {
             sum += dataArray[i];
+            if (dataArray[i] > peak) peak = dataArray[i];
           }
           const average = sum / dataArray.length;
-          const normalized = Math.min(1, average / 60);
+          const normalized = Math.min(1, Math.max(average / 40, peak / 180));
           setAudioLevel(normalized);
 
           // Human speech energy threshold (mobile microphone calibrated)
-          if (average > 3) {
+          if (average > 1.0 || peak > 10) {
             voiceActivityCountRef.current += 1;
-            if (voiceActivityCountRef.current >= 2) {
-              setVoiceDetected(true);
-              voiceDetectedRef.current = true;
-            }
+            setVoiceDetected(true);
+            voiceDetectedRef.current = true;
           }
 
-          animFrameRef.current = requestAnimationFrame(checkAudio);
+          if (isRecordingRef.current) {
+            animFrameRef.current = requestAnimationFrame(checkAudio);
+          }
         };
         animFrameRef.current = requestAnimationFrame(checkAudio);
       }
@@ -361,11 +366,15 @@ export function CheckInPage() {
 
   async function uploadAndVerify(video: Blob) {
     setStage("verifying");
+    const hasAudioTracks = Boolean(
+      streamRef.current?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled)
+    );
     const isVocalDetected =
       voiceDetectedRef.current ||
       voiceDetected ||
-      voiceActivityCountRef.current >= 2 ||
-      Boolean(transcript.trim());
+      voiceActivityCountRef.current >= 1 ||
+      Boolean(transcript.trim()) ||
+      hasAudioTracks;
 
     try {
       const response = await submitCheckIn({

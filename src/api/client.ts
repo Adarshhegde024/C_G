@@ -108,7 +108,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   const headers: Record<string, string> = {};
-  const token = getToken();
+  const isAuthEndpoint = path.startsWith("/api/auth/login") || path.startsWith("/api/auth/register");
+  const token = isAuthEndpoint ? null : getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
@@ -133,7 +134,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       // Non-JSON error body — fall through to the status mapping.
     }
 
-    if (response.status === 401 && token) {
+    if (response.status === 401 && token && !isAuthEndpoint) {
       setToken(null);
       sessionExpiredListeners.forEach((listener) => listener());
       throw new ApiError(401, SESSION_EXPIRED_MESSAGE);

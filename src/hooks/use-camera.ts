@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 export type CameraStatus = "idle" | "starting" | "ready" | "denied" | "error";
 
@@ -56,6 +57,16 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
     setStatus("starting");
     setError(null);
     try {
+      // On native mobile (Capacitor Android/iOS), request permissions via native plugin
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { Camera } = await import("@capacitor/camera");
+          await Camera.requestPermissions();
+        } catch (capErr) {
+          console.warn("Native camera permission request:", capErr);
+        }
+      }
+
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -66,11 +77,18 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
         if (firstErr instanceof DOMException && (firstErr.name === "NotAllowedError" || firstErr.name === "SecurityError")) {
           throw firstErr;
         }
-        // Fallback to basic video constraint if camera doesn't support specific resolution or facingMode
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio,
-        });
+        // Fallback 1: basic video + audio without specific resolution or facingMode
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio,
+          });
+        } catch {
+          // Fallback 2: video-only if audio device is unavailable or muted
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          });
+        }
       }
 
       streamRef.current = stream;

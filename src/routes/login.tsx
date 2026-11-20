@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
@@ -10,7 +10,7 @@ import { AuthShell } from "@/components/layout/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/skeleton";
-import { ApiError } from "@/api/client";
+import { ApiError, setToken } from "@/api/client";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: ({ context }) => {
@@ -62,6 +62,11 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Clear any stale local token so login requests always start fresh
+    setToken(null);
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();

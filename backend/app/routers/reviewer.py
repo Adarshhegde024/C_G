@@ -153,13 +153,37 @@ async def approve_case(
         "updated_at": now_iso
     }) or case_data
 
+    owner_profile = get_profile_by_id(owner_id) or {}
+    owner_name = owner_profile.get("full_name") or "Vault Owner"
+
     # Execute Legacy Release: Release assigned documents
+    from app.database import get_recipient_by_id
+    from app.services.email import send_documents_released_to_recipient_email
+
     owner_docs = get_documents_for_owner(owner_id)
+    recipient_doc_counts: Dict[str, int] = {}
     for doc in owner_docs:
         update_document(str(doc["id"]), {
             "release_status": "RELEASED",
             "released_at": now_iso
         })
+        rec_id = doc.get("assigned_recipient_id")
+        if rec_id:
+            recipient_doc_counts[str(rec_id)] = recipient_doc_counts.get(str(rec_id), 0) + 1
+
+    # Dispatch email alerts to each recipient whose documents have been released
+    for rec_id, count in recipient_doc_counts.items():
+        rec_data = get_recipient_by_id(rec_id)
+        if rec_data and rec_data.get("email"):
+            try:
+                send_documents_released_to_recipient_email(
+                    recipient_name=rec_data.get("name") or "Trusted Recipient",
+                    recipient_email=rec_data["email"],
+                    owner_name=owner_name,
+                    documents_count=count,
+                )
+            except Exception as e:
+                logger.warning(f"Could not dispatch release email to recipient {rec_data.get('email')}: {e}")
 
     # Update owner profile status
     update_profile(owner_id, {

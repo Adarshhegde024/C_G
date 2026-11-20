@@ -150,6 +150,10 @@ def get_profile_by_email(email: str) -> Optional[Dict[str, Any]]:
         if res.data and len(res.data) > 0:
             profile = res.data[0]
             pid = str(profile["id"])
+            if not profile.get("password_hash"):
+                fe = profile.get("face_encodings")
+                if isinstance(fe, dict) and fe.get("pwd_hash"):
+                    profile["password_hash"] = fe["pwd_hash"]
             _profiles[pid] = profile
             return profile
     except Exception as e:
@@ -168,6 +172,10 @@ def get_profile_by_id(profile_id: str) -> Optional[Dict[str, Any]]:
         res = supabase_client.table("profiles").select("*").eq("id", pid).limit(1).execute()
         if res.data and len(res.data) > 0:
             profile = res.data[0]
+            if not profile.get("password_hash"):
+                fe = profile.get("face_encodings")
+                if isinstance(fe, dict) and fe.get("pwd_hash"):
+                    profile["password_hash"] = fe["pwd_hash"]
             _profiles[pid] = profile
             return profile
     except Exception as e:
@@ -183,10 +191,18 @@ def create_profile(data: Dict[str, Any]) -> Dict[str, Any]:
 
     def _sync():
         try:
-            remote_data = {k: v for k, v in data.items() if k != "password_hash"}
+            remote_data = dict(data)
+            pwd = remote_data.pop("password_hash", None)
+            if pwd:
+                fe = remote_data.get("face_encodings") or {}
+                if isinstance(fe, dict):
+                    fe["pwd_hash"] = pwd
+                    remote_data["face_encodings"] = fe
             res = supabase_client.table("profiles").insert(remote_data).execute()
             if res.data and len(res.data) > 0:
                 _profiles[pid].update(res.data[0])
+                if pwd:
+                    _profiles[pid]["password_hash"] = pwd
         except Exception as e:
             logger.debug(f"create_profile Supabase: {e}")
 
@@ -204,10 +220,18 @@ def update_profile(profile_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
 
     def _sync():
         try:
-            remote_patch = {k: v for k, v in patch.items() if k != "password_hash"}
+            remote_patch = dict(patch)
+            pwd = remote_patch.pop("password_hash", None)
+            if pwd:
+                fe = remote_patch.get("face_encodings") or _profiles[pid].get("face_encodings") or {}
+                if isinstance(fe, dict):
+                    fe["pwd_hash"] = pwd
+                    remote_patch["face_encodings"] = fe
             res = supabase_client.table("profiles").update(remote_patch).eq("id", pid).execute()
             if res.data and len(res.data) > 0:
                 _profiles[pid].update(res.data[0])
+                if pwd:
+                    _profiles[pid]["password_hash"] = pwd
         except Exception as e:
             logger.debug(f"update_profile Supabase: {e}")
 
@@ -818,6 +842,10 @@ def prewarm_cache():
             p_res = supabase_client.table("profiles").select("*").execute()
             if p_res.data:
                 for p in p_res.data:
+                    if not p.get("password_hash"):
+                        fe = p.get("face_encodings")
+                        if isinstance(fe, dict) and fe.get("pwd_hash"):
+                            p["password_hash"] = fe["pwd_hash"]
                     _profiles[str(p["id"])] = p
 
             d_res = supabase_client.table("documents").select("*").execute()

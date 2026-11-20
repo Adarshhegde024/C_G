@@ -353,6 +353,54 @@ CloudGuard Security Team"""
     return send_email(recipient_email, subject, html, text_body)
 
 
+def send_documents_released_to_recipient_email(
+    recipient_name: str,
+    recipient_email: str,
+    owner_name: str,
+    documents_count: int,
+) -> Dict[str, Any]:
+    """
+    Notifies a trusted recipient that vault documents assigned to them have been verified and released.
+    """
+    subject = f"CONFIDENTIAL: Documents have been released to you from {owner_name}'s CloudGuard Vault"
+    preheader = f"Vault verification is complete. {documents_count} document(s) are now accessible to you."
+
+    access_url = f"{FRONTEND_URL}/recipient/documents"
+    content_html = f"""
+    <p style="margin: 0 0 16px; font-size: 15px; color: #cbd5e1;">Dear <strong>{recipient_name}</strong>,</p>
+    <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #94a3b8;">
+        Following formal verification of the legacy case for <strong>{owner_name}</strong>, 
+        confidential documents designated for you in their digital vault have been unlocked and released.
+    </p>
+    <div style="background-color: #1e1b4b; border: 1px solid #6366f1; border-radius: 8px; padding: 18px; margin: 20px 0;">
+        <p style="margin: 0 0 8px; font-weight: 600; color: #e0e7ff; font-size: 14px;">Available Legacy Documents</p>
+        <p style="margin: 0; color: #a5b4fc; font-size: 13px;">{documents_count} document(s) assigned to your recipient profile are now available for secure download.</p>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #94a3b8;">
+        You can access and download your assigned documents through your secure recipient portal.
+    </p>
+    """
+    text_body = f"""Dear {recipient_name},
+
+Following formal verification of the legacy case for {owner_name}, confidential documents designated for you in their digital vault have been unlocked and released.
+
+Total Documents: {documents_count}
+
+You can access and download your assigned documents through your secure recipient portal:
+{access_url}
+
+CloudGuard Digital Legacy Security
+"""
+    html = _wrap_email_html(
+        title="Documents Released",
+        preheader=preheader,
+        content_html=content_html,
+        action_url=access_url,
+        action_label="Access Your Documents",
+    )
+    return send_email(recipient_email, subject, html, text_body)
+
+
 def send_missed_checkin_dual_alert(
     owner_name: str,
     owner_email: str,

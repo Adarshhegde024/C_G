@@ -31,11 +31,14 @@ CHALLENGE_CACHE: Dict[str, Dict[str, Any]] = {}
 CHALLENGE_TTL_SECONDS = 300
 
 CHALLENGE_TEMPLATES = [
-    "CloudGuard {code}, I confirm my vault is active and secure.",
-    "Vault key {code}, I verify my presence and identity.",
-    "CloudGuard {code}, I am the authorized owner of this vault.",
-    "Security check {code}, my digital vault is safe and verified.",
-    "CloudGuard {code}, extending my check-in deadline today.",
+    "I confirm that my CloudGuard vault is active and secure.",
+    "I verify my identity and authorize my digital vault to remain safe.",
+    "I am the registered owner and I confirm my vault protection today.",
+    "Security verification confirmed, my digital legacy is active.",
+    "I am present and well, extending my vault check-in today.",
+    "I confirm my well-being and authorize my vault to remain private.",
+    "I verify my credentials and confirm my digital safety today.",
+    "My vault is protected and I am actively confirming my security.",
 ]
 
 
@@ -49,18 +52,16 @@ def cleanup_expired_challenges():
 
 def generate_checkin_challenge() -> Dict[str, Any]:
     """
-    Generates a randomized, dynamic spoken challenge phrase with a unique 4-digit code.
+    Generates a randomized, dynamic spoken challenge phrase (pure natural text, no numeric codes).
     Returns the challenge ID and prompt text for the user to speak during check-in.
     """
     cleanup_expired_challenges()
-    code = f"{np.random.randint(1000, 9999)}"
-    template = np.random.choice(CHALLENGE_TEMPLATES)
-    phrase = template.format(code=code)
+    phrase = str(np.random.choice(CHALLENGE_TEMPLATES))
     challenge_id = f"ch_{uuid.uuid4().hex[:12]}"
 
     CHALLENGE_CACHE[challenge_id] = {
         "phrase": phrase,
-        "code": code,
+        "code": "",
         "created_at": time.time(),
     }
 
@@ -68,7 +69,7 @@ def generate_checkin_challenge() -> Dict[str, Any]:
     return {
         "challenge_id": challenge_id,
         "phrase": phrase,
-        "code": code,
+        "code": "",
         "words": words,
         "expires_in_seconds": CHALLENGE_TTL_SECONDS,
     }
@@ -102,7 +103,6 @@ def verify_spoken_phrase(
             return False, "The spoken challenge has expired. Please refresh and try again."
 
         expected_phrase = challenge["phrase"]
-        code = challenge["code"]
 
         def extract_tokens(text: str) -> set:
             cleaned = re.sub(r"[^\w\s]", " ", text.lower())
@@ -114,28 +114,25 @@ def verify_spoken_phrase(
         if not expected_tokens:
             return True, None
 
-        # Check for direct code match (e.g., '4819' or individual digits)
-        code_spoken = code in transcript or all(digit in transcript for digit in code)
-
         # Calculate token overlap ratio
         overlap = expected_tokens.intersection(spoken_tokens)
-        overlap_ratio = len(overlap) / len(expected_tokens)
+        overlap_ratio = len(overlap) / len(expected_tokens) if expected_tokens else 1.0
 
-        # Accept if at least 35% of challenge tokens match, or the unique code + 1 keyword matches
-        if overlap_ratio >= 0.35 or (code_spoken and len(overlap) >= 2):
+        # Accept if at least 30% of challenge tokens match, or at least 2 distinct words match
+        if overlap_ratio >= 0.30 or len(overlap) >= 2:
             return True, None
 
         return False, f"Spoken phrase did not match. Expected '{expected_phrase}', detected '{transcript.strip()}'."
 
     # If transcript is absent (e.g. mobile Android WebView / Capacitor app / Safari)
-    # verify via real-time Web Audio vocal energy and audio track presence
+    # verify via real-time Web Audio vocal energy
     if voice_detected is True:
         return True, None
 
     if voice_detected is False:
         return False, "No speech detected. Please speak the highlighted phrase clearly into your microphone."
 
-    # Fallback when client didn't supply audio energy flag: check basic audio presence
+    # Fallback when client didn't supply voice_detected flag: check basic audio presence
     if has_audio_stream:
         return True, None
 
