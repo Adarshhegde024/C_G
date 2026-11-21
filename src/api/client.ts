@@ -13,7 +13,7 @@ function resolveBaseUrl(): string {
     const origin = window.location.origin || "";
     const isNativeScheme = origin.startsWith("capacitor:") || origin.startsWith("ionic:") || origin.startsWith("file:");
     if (isNativeScheme) {
-      return "https://c-g-2-gqee.onrender.com";
+      return "https://c-g.onrender.com";
     }
   }
   return "";

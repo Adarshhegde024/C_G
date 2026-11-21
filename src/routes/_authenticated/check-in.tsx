@@ -40,6 +40,18 @@ export const Route = createFileRoute("/_authenticated/check-in")({
     ],
   }),
   component: CheckInPage,
+  errorComponent: ({ error, reset }) => (
+    <div className="mx-auto max-w-lg p-6 text-center">
+      <Card className="p-6">
+        <p className="font-display font-semibold text-foreground text-lg">Unable to load check-in</p>
+        <p className="mt-2 text-sm text-muted-foreground">{error.message || "An unexpected error occurred."}</p>
+        <Button variant="accent" className="mt-4" onClick={reset}>
+          <RotateCcw className="h-4 w-4 mr-2" />
+          Try again
+        </Button>
+      </Card>
+    </div>
+  ),
 });
 
 const RECORDING_SECONDS = 10;
@@ -127,6 +139,8 @@ export function CheckInPage() {
     staleTime: 30_000,
     initialData: defaultFallbackChallenge,
   });
+
+  const challengeWords = challenge?.words || defaultFallbackChallenge.words;
 
   // Check Web Speech API support
   useEffect(() => {
@@ -534,7 +548,6 @@ export function CheckInPage() {
   }
 
   const success = result ? String(result.result).toUpperCase() === "SUCCESS" : false;
-  const challengeWords = challenge?.words || [];
 
   return (
     <>
