@@ -67,28 +67,51 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
         }
       }
 
-      let stream: MediaStream;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API is not supported in this browser or context (requires HTTPS).");
+      }
+
+      let stream: MediaStream | null = null;
+      let lastErr: unknown = null;
+
+      // Tier 1: Front camera + audio with ideal dimensions
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
-          audio,
+          audio: audio ? true : false,
         });
-      } catch (firstErr) {
-        if (firstErr instanceof DOMException && (firstErr.name === "NotAllowedError" || firstErr.name === "SecurityError")) {
-          throw firstErr;
-        }
-        // Fallback 1: basic video + audio without specific resolution or facingMode
+      } catch (err1) {
+        lastErr = err1;
+        // Tier 2: Flexible front camera + audio
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio,
+            video: { facingMode: "user" },
+            audio: audio ? true : false,
           });
-        } catch {
-          // Fallback 2: video-only if audio device is unavailable or muted
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-          });
+        } catch (err2) {
+          lastErr = err2;
+          // Tier 3: Basic video first, then attach audio track if available
+          try {
+            const vStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+            if (audio) {
+              try {
+                const aStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                aStream.getAudioTracks().forEach((track) => vStream.addTrack(track));
+              } catch (audioErr) {
+                console.warn("Audio stream unavailable, proceeding with video-only:", audioErr);
+              }
+            }
+            stream = vStream;
+          } catch (err3) {
+            lastErr = err3;
+          }
         }
+      }
+
+      if (!stream) {
+        throw lastErr || new Error("Failed to initialize camera or microphone stream.");
       }
 
       streamRef.current = stream;
@@ -99,9 +122,10 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
       setStatus("ready");
       return true;
     } catch (err) {
+      console.error("Camera acquisition error:", err);
       if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
         setStatus("denied");
-        setError("Camera access was blocked. Allow camera access in your browser settings and try again.");
+        setError("Camera access was blocked. Tap 'Enable camera & microphone' or check app/browser permissions and try again.");
       } else {
         setStatus("error");
         setError("We couldn't start the camera. Please check that a camera is connected and try again.");

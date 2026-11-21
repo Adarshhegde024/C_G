@@ -175,7 +175,24 @@ export function CheckInPage() {
     }
   }, [stop]);
 
+  // Automatically request camera and microphone access on mount
+  useEffect(() => {
+    let active = true;
+    if (stage === "permission" && status === "idle") {
+      void (async () => {
+        const ok = await start();
+        if (ok && active) {
+          setStage("positioning");
+        }
+      })();
+    }
+    return () => {
+      active = false;
+    };
+  }, [stage, status, start]);
+
   async function requestPermissions() {
+    setSubmitError(null);
     const ok = await start();
     if (ok) setStage("positioning");
   }
@@ -413,7 +430,7 @@ export function CheckInPage() {
     }
   }
 
-  function resetFlow() {
+  async function resetFlow() {
     stop();
     stopAudioAnalyser();
     setResult(null);
@@ -426,7 +443,8 @@ export function CheckInPage() {
     voiceActivityCountRef.current = 0;
     faceSnapshotBlobRef.current = null;
     void refetchChallenge();
-    setStage("positioning");
+    const ok = await start();
+    setStage(ok ? "positioning" : "permission");
   }
 
   const success = result ? String(result.result).toUpperCase() === "SUCCESS" : false;
