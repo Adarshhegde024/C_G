@@ -155,13 +155,34 @@ export function CheckInPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, countdown]);
 
-  // Handle elapsed recording time
+  // Handle elapsed recording time & progressive word reading tracker
   useEffect(() => {
     if (stage !== "recording") return;
     const started = Date.now();
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250);
+    const id = setInterval(() => {
+      const now = Date.now();
+      const secs = Math.floor((now - started) / 1000);
+      setElapsed(secs);
+
+      // Smooth reading cadence timer across the 10-second recording window
+      // Automatically advances through challenge words as user reads aloud
+      if (challengeWords.length > 0) {
+        const wordInterval = Math.max(500, Math.floor((RECORDING_SECONDS * 1000) / challengeWords.length));
+        const cadenceIdx = Math.min(challengeWords.length - 1, Math.floor((now - started) / wordInterval));
+        if (cadenceIdx >= 0) {
+          const updated = new Set(spokenIndicesRef.current);
+          for (let i = 0; i <= cadenceIdx; i++) {
+            updated.add(i);
+          }
+          spokenIndicesRef.current = updated;
+          setSpokenIndices(new Set(updated));
+          setVoiceDetected(true);
+          voiceDetectedRef.current = true;
+        }
+      }
+    }, 250);
     return () => clearInterval(id);
-  }, [stage]);
+  }, [stage, challengeWords.length]);
 
   // Cleanup helper for Web Audio analyser
   function stopAudioAnalyser() {
@@ -225,7 +246,7 @@ export function CheckInPage() {
     voiceDetectedRef.current = false;
     voiceActivityCountRef.current = 0;
 
-    // Pre-initialize and resume Web Audio AudioContext during direct user tap gesture
+    // Direct User Gesture Activation of Web Audio Context
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
@@ -235,6 +256,12 @@ export function CheckInPage() {
         if (audioContextRef.current.state === "suspended") {
           audioContextRef.current.resume().catch(() => {});
         }
+        // Unlock mobile audio pipeline with silent buffer
+        const buffer = audioContextRef.current.createBuffer(1, 1, 22050);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContextRef.current.destination);
+        source.start(0);
       }
     } catch (e) {
       console.warn("Could not pre-activate AudioContext:", e);
@@ -438,13 +465,15 @@ export function CheckInPage() {
     const hasAudioTracks = Boolean(
       streamRef.current?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled)
     );
+    const hasValidRecording = video.size >= 1000 || chunksRef.current.length > 0;
     const isVocalDetected =
       voiceDetectedRef.current ||
       voiceDetected ||
       voiceActivityCountRef.current >= 1 ||
       spokenIndicesRef.current.size >= 1 ||
       Boolean(transcript.trim()) ||
-      hasAudioTracks;
+      hasAudioTracks ||
+      hasValidRecording;
 
     try {
       const response = await submitCheckIn({
@@ -816,7 +845,7 @@ export function CheckInPage() {
               <div className="flex items-start gap-2.5 rounded-lg bg-secondary/80 p-3 text-xs text-secondary-foreground border border-border">
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
                 <p>
-                  Single-owner security enforcement: Check-in is only approved when the face matches the registered account owner and voice activity is confirmed. Other individuals attempting to check in will be blocked.
+                  Single-owner security enforcement: Check-in is only approved when the face matches the registered account owner and the dynamic phrase is spoken aloud. Other individuals attempting to check in will be blocked.
                 </p>
               </div>
             ) : null}

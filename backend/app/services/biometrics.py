@@ -337,25 +337,7 @@ def verify_checkin_video(
             "message": "Please ensure your camera and microphone are connected and try again.",
         }
 
-    # Step 1: Voice & Spoken Phrase Challenge Verification
-    has_audio_bytes = len(video_bytes) > 2000
-    voice_verified, voice_error = verify_spoken_phrase(
-        challenge_id=challenge_id,
-        transcript=transcript,
-        voice_detected=voice_detected,
-        has_audio_stream=has_audio_bytes,
-    )
-    if not voice_verified and challenge_id:
-        return {
-            "result": "FAILED",
-            "face_match": False,
-            "liveness": False,
-            "voice_verified": False,
-            "reason": voice_error or "Spoken phrase verification failed.",
-            "message": "Please speak the highlighted phrase clearly during the recording.",
-        }
-
-    # Step 2: Facial Biometric Extraction
+    # Step 1: Facial Biometric Extraction & Video Decoding
     candidate_features: Optional[List[float]] = None
 
     # Check high-resolution snapshot first if provided
@@ -365,7 +347,7 @@ def verify_checkin_video(
         if snap_img is not None:
             candidate_features = extract_face_features(snap_img)
 
-    # Step 3: Video Decoding, Motion Analysis & Backup Face Extraction
+    # Step 2: Video Decoding, Motion Analysis & Backup Face Extraction
     liveness_passed = True
     motion_energies: List[float] = []
 
@@ -415,7 +397,7 @@ def verify_checkin_video(
         if avg_motion < 0.05:
             liveness_passed = False
 
-    # Step 4: Strict Face Biometric Matching Against Owner Baseline
+    # Step 3: Strict Face Biometric Matching Against Owner Baseline (Primary Authority)
     face_match_passed = False
     enrolled_template = enrolled_data.get("template") if enrolled_data else None
 
@@ -425,7 +407,7 @@ def verify_checkin_video(
                 "result": "FAILED",
                 "face_match": False,
                 "liveness": liveness_passed,
-                "voice_verified": voice_verified,
+                "voice_verified": False,
                 "reason": "Face verification failed. No face was detected in the camera frame.",
                 "message": "Please center your face inside the guide frame and ensure good lighting.",
             }
@@ -436,7 +418,7 @@ def verify_checkin_video(
                 "result": "FAILED",
                 "face_match": False,
                 "liveness": liveness_passed,
-                "voice_verified": voice_verified,
+                "voice_verified": False,
                 "reason": "Face verification failed. The face presented does not match the registered vault owner.",
                 "message": "Access denied. Only the registered vault owner can perform check-ins.",
             }
@@ -450,9 +432,27 @@ def verify_checkin_video(
             "result": "FAILED",
             "face_match": face_match_passed,
             "liveness": False,
-            "voice_verified": voice_verified,
+            "voice_verified": False,
             "reason": "Liveness check failed. Natural motion was not detected.",
             "message": "Please ensure you are facing the camera live and retry.",
+        }
+
+    # Step 4: Spoken Phrase Challenge Verification & Voice Activity
+    has_audio_bytes = len(video_bytes) > 2000
+    voice_verified, voice_error = verify_spoken_phrase(
+        challenge_id=challenge_id,
+        transcript=transcript,
+        voice_detected=voice_detected,
+        has_audio_stream=has_audio_bytes,
+    )
+    if not voice_verified and challenge_id:
+        return {
+            "result": "FAILED",
+            "face_match": face_match_passed,
+            "liveness": liveness_passed,
+            "voice_verified": False,
+            "reason": voice_error or "Spoken phrase verification failed.",
+            "message": "Please speak the highlighted phrase clearly during the recording.",
         }
 
     return {
