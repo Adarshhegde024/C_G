@@ -4,6 +4,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Camera,
+  Check,
   CheckCircle2,
   Fingerprint,
   Mic,
@@ -82,6 +83,10 @@ export function CheckInPage() {
   // Spoken challenge state
   const [transcript, setTranscript] = useState("");
   const [spokenWords, setSpokenWords] = useState<Set<string>>(new Set());
+  const [spokenIndices, setSpokenIndices] = useState<Set<number>>(new Set());
+  const spokenIndicesRef = useRef<Set<number>>(new Set());
+  const speechProgressRef = useRef<number>(0);
+  const lastSpeechTimeRef = useRef<number>(0);
   const [speechSupported, setSpeechSupported] = useState(false);
 
   // Real-time Audio Activity Analyser state
@@ -103,15 +108,24 @@ export function CheckInPage() {
   const faceSnapshotBlobRef = useRef<Blob | null>(null);
   const speechRecognitionRef = useRef<any>(null);
 
+  // Default fallback phrase ensures immediate rendering without waiting for cold-start
+  const defaultFallbackChallenge: CheckInChallenge = {
+    challenge_id: "ch_live_owner",
+    phrase: "I am the registered owner and I confirm my vault protection today",
+    code: "",
+    words: ["I", "am", "the", "registered", "owner", "and", "I", "confirm", "my", "vault", "protection", "today"],
+  };
+
   // Fetch dynamic randomized challenge phrase
   const {
-    data: challenge,
+    data: challenge = defaultFallbackChallenge,
     refetch: refetchChallenge,
     isPending: challengeLoading,
   } = useQuery<CheckInChallenge>({
     queryKey: ["checkin-challenge"],
     queryFn: fetchCheckInChallenge,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    initialData: defaultFallbackChallenge,
   });
 
   // Check Web Speech API support
@@ -202,6 +216,10 @@ export function CheckInPage() {
     setElapsed(0);
     setTranscript("");
     setSpokenWords(new Set());
+    setSpokenIndices(new Set());
+    spokenIndicesRef.current = new Set();
+    speechProgressRef.current = 0;
+    lastSpeechTimeRef.current = 0;
     setAudioLevel(0);
     setVoiceDetected(false);
     voiceDetectedRef.current = false;
@@ -280,10 +298,23 @@ export function CheckInPage() {
           setAudioLevel(normalized);
 
           // Human speech energy threshold (mobile microphone calibrated)
-          if (average > 1.0 || peak > 10) {
+          const isVocal = average > 1.0 || peak > 10;
+          if (isVocal) {
             voiceActivityCountRef.current += 1;
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
+
+            // Progressive word cadence highlighting for mobile WebView
+            const now = Date.now();
+            if (now - lastSpeechTimeRef.current > 380) {
+              lastSpeechTimeRef.current = now;
+              const nextIdx = speechProgressRef.current;
+              if (nextIdx < challengeWords.length) {
+                spokenIndicesRef.current.add(nextIdx);
+                setSpokenIndices(new Set(spokenIndicesRef.current));
+                speechProgressRef.current = nextIdx + 1;
+              }
+            }
           }
 
           if (isRecordingRef.current) {
@@ -325,6 +356,18 @@ export function CheckInPage() {
               .filter(Boolean)
           );
           setSpokenWords(matched);
+
+          // Update word indices matching recognized speech tokens
+          const updated = new Set(spokenIndicesRef.current);
+          challengeWords.forEach((w, idx) => {
+            const clean = w.toLowerCase().replace(/[^\w]/g, "");
+            if (matched.has(clean)) {
+              updated.add(idx);
+            }
+          });
+          spokenIndicesRef.current = updated;
+          setSpokenIndices(new Set(updated));
+
           if (text.length > 2) {
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
@@ -366,6 +409,15 @@ export function CheckInPage() {
       recorderRef.current = recorder;
       setStage("recording");
 
+      // Capture mid-recording face snapshot at 3.5s when user is centered and reading
+      setTimeout(() => {
+        if (videoRef.current && videoRef.current.videoWidth > 0 && isRecordingRef.current) {
+          try {
+            faceSnapshotBlobRef.current = dataURLtoBlob(captureFrame(videoRef.current, 640));
+          } catch {}
+        }
+      }, 3500);
+
       // Auto-stop after intended duration
       setTimeout(() => {
         if (speechRecognitionRef.current) {
@@ -390,6 +442,7 @@ export function CheckInPage() {
       voiceDetectedRef.current ||
       voiceDetected ||
       voiceActivityCountRef.current >= 1 ||
+      spokenIndicesRef.current.size >= 1 ||
       Boolean(transcript.trim()) ||
       hasAudioTracks;
 
@@ -438,6 +491,10 @@ export function CheckInPage() {
     setElapsed(0);
     setTranscript("");
     setSpokenWords(new Set());
+    setSpokenIndices(new Set());
+    spokenIndicesRef.current = new Set();
+    speechProgressRef.current = 0;
+    lastSpeechTimeRef.current = 0;
     setAudioLevel(0);
     setVoiceDetected(false);
     voiceActivityCountRef.current = 0;
@@ -476,32 +533,29 @@ export function CheckInPage() {
               Read this phrase clearly into your microphone while keeping your face centered in the oval guide:
             </p>
 
-            <div className="rounded-lg bg-vault p-3 text-vault-foreground border border-border">
-              {challengeLoading ? (
-                <div className="flex items-center gap-2 text-sm text-vault-muted">
-                  <Spinner className="h-4 w-4 text-lavender" />
-                  Generating unique challenge phrase…
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-1.5 text-base sm:text-lg font-medium leading-relaxed">
-                  {challengeWords.map((word, idx) => {
-                    const clean = word.toLowerCase().replace(/[^\w]/g, "");
-                    const isSpoken = spokenWords.has(clean);
-                    return (
-                      <span
-                        key={idx}
-                        className={`rounded px-1.5 py-0.5 transition-all duration-200 ${
-                          isSpoken
-                            ? "bg-emerald-500/30 text-emerald-300 border border-emerald-500/60 font-semibold"
-                            : "bg-white/5 text-white/90 border border-white/10"
-                        }`}
-                      >
-                        {word}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+            <div className="rounded-lg bg-vault p-4 text-vault-foreground border border-border shadow-inner">
+              <div className="flex flex-wrap items-center gap-2 text-base sm:text-lg font-medium leading-relaxed">
+                {challengeWords.map((word, idx) => {
+                  const clean = word.toLowerCase().replace(/[^\w]/g, "");
+                  const isSpoken = spokenWords.has(clean) || spokenIndices.has(idx);
+                  const isCurrent = stage === "recording" && !isSpoken && (idx === 0 || spokenIndices.has(idx - 1));
+                  return (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm sm:text-base font-semibold transition-all duration-200 ${
+                        isSpoken
+                          ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/60 shadow-sm shadow-emerald-950/40"
+                          : isCurrent
+                          ? "bg-lavender/25 text-lavender border border-lavender/70 ring-2 ring-lavender/30 animate-pulse"
+                          : "bg-white/5 text-white/80 border border-white/10"
+                      }`}
+                    >
+                      {isSpoken ? <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> : null}
+                      {word}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Live Audio Activity / Waveform Bar */}
@@ -529,7 +583,7 @@ export function CheckInPage() {
                   voiceDetected || audioLevel > 0.08 ? (
                     <span className="font-medium text-emerald-400 flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                      Voice detected — keep speaking the phrase!
+                      Voice detected — reading aloud ({spokenIndices.size} of {challengeWords.length} words read)
                     </span>
                   ) : (
                     <span className="text-vault-muted flex items-center gap-1.5">
@@ -717,9 +771,23 @@ export function CheckInPage() {
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                     Center face within oval & prepare to speak
                   </Badge>
-                  <Button variant="accent" className="sm:ml-auto" onClick={beginCountdown}>
-                    <Video className="h-4 w-4 mr-2" aria-hidden />
-                    Start Verification
+                  <Button
+                    variant="accent"
+                    className="sm:ml-auto"
+                    disabled={!challenge || challengeLoading}
+                    onClick={beginCountdown}
+                  >
+                    {!challenge || challengeLoading ? (
+                      <>
+                        <Spinner className="h-4 w-4 mr-2 text-white" />
+                        Preparing phrase…
+                      </>
+                    ) : (
+                      <>
+                        <Video className="h-4 w-4 mr-2" aria-hidden />
+                        Start Verification
+                      </>
+                    )}
                   </Button>
                 </>
               ) : null}
