@@ -127,6 +127,15 @@ export interface EvidenceItem {
   download_url?: string;
 }
 
+export interface ReleasedDocItem {
+  id: string;
+  name: string;
+  file_type?: string;
+  size_bytes?: number;
+  released_at?: string;
+  download_url?: string;
+}
+
 export interface NomineeCase {
   id: string;
   status: string;
@@ -141,6 +150,7 @@ export interface NomineeCase {
   evidence?: EvidenceItem[];
   ocr?: OcrResult | null;
   audit_history?: Array<{ timestamp: string; event: string; description?: string }>;
+  released_documents?: ReleasedDocItem[];
 }
 
 export interface ReviewerCase {

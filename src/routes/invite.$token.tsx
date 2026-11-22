@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  FolderLock,
   HeartHandshake,
   KeyRound,
   LogIn,
@@ -102,6 +103,17 @@ function InvitePage() {
     }
   }
 
+  function handleGoToCase() {
+    if (acceptedResponse?.token && acceptedResponse.user) {
+      setToken(acceptedResponse.token);
+      void router.options.context.auth.ensureReady().then(() => {
+        void navigate({ to: "/nominee/case", replace: true });
+      });
+    } else {
+      void navigate({ to: "/login" });
+    }
+  }
+
   const isNominee = info?.role === "nominee";
   const ownerName = info?.vault_owner || info?.inviter_name || "the vault owner";
   const needsPassword = info?.status === "PENDING";
@@ -145,29 +157,29 @@ function InvitePage() {
               {/* Informative Nominee Role Guide Card */}
               <div className="rounded-xl border border-border bg-secondary/50 p-4 text-left space-y-3">
                 <div className="flex items-start gap-3">
+                  <FolderLock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Your personal vault is ready</p>
+                    <p className="text-xs text-muted-foreground">
+                      You have full access to your own CloudGuard vault. You can upload sensitive documents, set up check-ins, and designate your own nominee.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
                   <HeartHandshake className="mt-0.5 h-4 w-4 shrink-0 text-lavender" />
                   <div>
-                    <p className="text-xs font-semibold text-foreground">No action required today</p>
+                    <p className="text-xs font-semibold text-foreground">Emergency contact role active</p>
                     <p className="text-xs text-muted-foreground">
-                      {ownerName}'s vault is active and operating normally. Their regular biometric check-ins keep the vault locked and secure.
+                      {ownerName}'s vault is active and encrypted. Regular check-ins keep it secure. You will only be called upon if scheduled check-ins and grace periods lapse.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <div>
-                    <p className="text-xs font-semibold text-foreground">When will you be contacted?</p>
-                    <p className="text-xs text-muted-foreground">
-                      CloudGuard will only reach out to you if {ownerName} misses scheduled check-ins and the grace period expires.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">Your account is ready</p>
+                    <p className="text-xs font-semibold text-foreground">Login credentials saved</p>
                     <p className="text-xs text-muted-foreground">
                       Your credentials for <span className="font-medium text-foreground">{info.email}</span> have been saved. You can log in whenever needed.
                     </p>
@@ -182,28 +194,29 @@ function InvitePage() {
                   className="w-full flex items-center justify-center gap-2"
                   onClick={handleGoToDashboard}
                 >
-                  <UserCheck className="h-4 w-4" />
-                  Enter Nominee Portal
+                  <FolderLock className="h-4 w-4" />
+                  {isNominee ? "Open My Personal Vault" : "Enter Dashboard"}
                 </Button>
 
+                {isNominee ? (
+                  <Button
+                    variant="outline"
+                    className="w-full flex items-center justify-center gap-2"
+                    onClick={handleGoToCase}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    View Nominated Case Details
+                  </Button>
+                ) : null}
+
                 <Button
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2"
+                  variant="ghost"
+                  className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
                   onClick={() => void navigate({ to: "/login" })}
                 >
                   <LogIn className="h-4 w-4" />
                   Done · Return to Sign In
                 </Button>
-
-                {currentUser && currentUser.role === "owner" ? (
-                  <Button
-                    variant="ghost"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => void navigate({ to: "/dashboard" })}
-                  >
-                    Back to Owner Vault Dashboard
-                  </Button>
-                ) : null}
               </div>
             </div>
           ) : (

@@ -317,6 +317,57 @@ export function NomineeCasePage() {
         </Card>
       )}
 
+      {/* Released Vault Documents Section upon Approval */}
+      {isApproved && (
+        <Card className="mb-6 border-success/40 bg-success/5 shadow-sm">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BadgeCheck className="h-5 w-5 text-success" aria-hidden />
+                <CardTitle className="text-success">Case Approved · Vault Documents Released</CardTitle>
+              </div>
+              <Badge variant="success">Access Granted</Badge>
+            </div>
+            <CardDescription>
+              The verification case has been approved by the CloudGuard compliance team. You can securely download the released vault documents below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {caseData.released_documents && caseData.released_documents.length > 0 ? (
+              <ul className="divide-y divide-border/60 rounded-lg border border-border bg-card">
+                {caseData.released_documents.map((doc) => (
+                  <li key={doc.id} className="flex items-center justify-between p-3.5 hover:bg-accent/40 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
+                        <FileText className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.file_type || "Document"} {doc.size_bytes ? `· ${(doc.size_bytes / 1024).toFixed(1)} KB` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={doc.download_url || `/api/documents/${doc.id}/download`}
+                      download
+                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-ring"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="rounded-lg border border-border p-4 text-center text-sm text-muted-foreground">
+                Documents have been approved and unlocked for authorized recipients.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Step 1: Claim Grounds & Legal Declaration */}
       <Card className="mb-6">
         <CardHeader>

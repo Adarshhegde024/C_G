@@ -264,6 +264,22 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
     if case_data.get("status") in ["EVIDENCE_SUBMITTED", "AWAITING_REVIEW"]:
         audit_history.append({"timestamp": datetime.now(timezone.utc).isoformat(), "event": "EVIDENCE_UPLOADED", "description": "Nominee submitted evidence"})
 
+    # Released documents if approved
+    released_docs = []
+    if case_data.get("status") == "APPROVED":
+        from app.database import get_documents_for_owner
+        owner_docs = get_documents_for_owner(owner_id)
+        for d in owner_docs:
+            if d.get("release_status") == "RELEASED":
+                released_docs.append({
+                    "id": str(d["id"]),
+                    "name": d["name"],
+                    "file_type": d.get("file_type", "document"),
+                    "size_bytes": d.get("size_bytes", 0),
+                    "released_at": d.get("released_at"),
+                    "download_url": f"/api/documents/{d['id']}/download",
+                })
+
     return NomineeCase(
         id=case_id,
         status=case_data.get("status", "ELIGIBLE"),
@@ -278,6 +294,7 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
         evidence=evidence_list,
         ocr=case_data.get("ocr_result"),
         audit_history=audit_history,
+        released_documents=released_docs,
     )
 
 

@@ -1,11 +1,16 @@
 import { ShieldCheck } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
+import { useAuth } from "@/auth/AuthProvider";
+import { homeForRole } from "@/auth/roles";
 import { cn } from "@/lib/utils";
 
-export function Logo({ to = "/", variant = "dark", className }: { to?: string; variant?: "dark" | "light"; className?: string }) {
+export function Logo({ to, variant = "dark", className }: { to?: string; variant?: "dark" | "light"; className?: string }) {
+  const { user } = useAuth();
+  const destination = to ?? (user ? homeForRole(user.role) : "/");
+
   return (
-    <Link to={to} className={cn("inline-flex items-center gap-2 focus-ring rounded-md", className)}>
+    <Link to={destination} className={cn("inline-flex items-center gap-2 focus-ring rounded-md", className)}>
       <span
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg",

@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import {
   ArrowRight,
   CheckCircle2,
@@ -12,11 +12,16 @@ import {
 } from "lucide-react";
 
 import heroImage from "@/assets/hero-vault.png";
+import { homeForRole } from "@/auth/roles";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: ({ context }) => {
+    const user = context.auth.getUser();
+    if (user) throw redirect({ to: homeForRole(user.role), replace: true });
+  },
   head: () => ({
     meta: [
       { title: "CloudGuard — Keep what matters. Protected." },

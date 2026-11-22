@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 
 import { fetchNotifications, markNotificationsRead } from "@/api/notifications";
@@ -19,33 +20,24 @@ function timeAgo(iso: string): string {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   useOutsideClick(ref, () => setOpen(false));
 
-  useEffect(() => {
-    if (!open || notifications) return;
-    let cancelled = false;
-    fetchNotifications()
-      .then((items) => {
-        if (!cancelled) setNotifications(items);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Notifications are unavailable right now.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, notifications]);
+  const { data: notifications, isLoading, isError } = useQuery<AppNotification[]>({
+    queryKey: ["notifications"],
+    queryFn: fetchNotifications,
+    refetchInterval: 5000,
+    retry: 1,
+  });
 
   const unread = notifications?.filter((n) => !n.read).length ?? 0;
 
   async function handleMarkRead() {
     try {
       await markNotificationsRead();
-      setNotifications((current) => current?.map((n) => ({ ...n, read: true })) ?? null);
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch {
       // Non-critical — leave state as-is.
     }
@@ -79,13 +71,13 @@ export function NotificationBell() {
             ) : null}
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {error ? (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground">{error}</p>
-            ) : notifications === null ? (
+            {isError ? (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">Notifications are unavailable right now.</p>
+            ) : isLoading && !notifications ? (
               <div className="flex justify-center px-4 py-6">
                 <Spinner className="text-lavender" />
               </div>
-            ) : notifications.length === 0 ? (
+            ) : !notifications || notifications.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>
             ) : (
               notifications.map((notification) => (

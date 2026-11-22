@@ -243,6 +243,7 @@ class NomineeCase(BaseModel):
     evidence: Optional[List[EvidenceItem]] = []
     ocr: Optional[OcrResult] = None
     audit_history: Optional[List[Dict[str, Any]]] = []
+    released_documents: Optional[List[Dict[str, Any]]] = []
 
 
 class ReviewerCase(BaseModel):
@@ -262,6 +263,7 @@ class ReviewerCase(BaseModel):
     evidence: Optional[List[EvidenceItem]] = []
     ocr: Optional[OcrResult] = None
     audit_history: Optional[List[Dict[str, Any]]] = []
+    released_documents: Optional[List[Dict[str, Any]]] = []
 
 
 class ReviewActionPayload(BaseModel):

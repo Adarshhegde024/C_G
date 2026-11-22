@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/auth/AuthProvider";
-import { ROLE_LABELS } from "@/auth/roles";
+import { ROLE_LABELS, homeForRole } from "@/auth/roles";
 import { Logo } from "@/components/layout/Logo";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/check-in", label: "Check-in", shortLabel: "Check-in", icon: Camera },
     { to: "/nominee", label: "Nominee", shortLabel: "Nominee", icon: UserCheck },
     { to: "/recipients", label: "Recipients", shortLabel: "Recipients", icon: Users },
+    { to: "/nominee/case", label: "Nominated Case", shortLabel: "Case", icon: Briefcase },
     { to: "/history", label: "History", shortLabel: "History", icon: History },
     { to: "/profile", label: "Profile", shortLabel: "Profile", icon: User },
     { to: "/settings", label: "Settings", shortLabel: "Settings", icon: Settings },
@@ -144,9 +145,13 @@ function TabletRail({ onOpenMenu }: { onOpenMenu: () => void }) {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-20 flex-col items-center border-r border-white/10 vault-gradient py-5 md:flex lg:hidden">
-      <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-lavender/20 text-lavender font-bold text-lg">
+      <Link
+        to={homeForRole(user.role)}
+        title="Dashboard"
+        className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-lavender/20 text-lavender font-bold text-lg focus-ring transition-transform hover:scale-105"
+      >
         CG
-      </div>
+      </Link>
       <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto px-2">
         {items.map((item) => (
           <Link

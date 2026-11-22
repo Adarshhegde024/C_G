@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -87,7 +87,30 @@ function DashboardPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   useMinuteTick();
-  const query = useQuery<DashboardSummary, ApiError>({ queryKey: ["dashboard"], queryFn: fetchDashboard });
+  const query = useQuery<DashboardSummary, ApiError>({
+    queryKey: ["dashboard"],
+    queryFn: fetchDashboard,
+    refetchInterval: 5000,
+  });
+
+  const prevNomineeStatusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!query.data?.nominee_status) return;
+    const current = query.data.nominee_status;
+    const prev = prevNomineeStatusRef.current;
+
+    // Detect when nominee status transitions from Pending to Accepted
+    if (prev && prev.toLowerCase().includes("pending") && current.toLowerCase().includes("accepted")) {
+      toast.success("Nominee accepted your invitation! Vault emergency contact is active.", {
+        duration: 6000,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["nominee"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+
+    prevNomineeStatusRef.current = current;
+  }, [query.data?.nominee_status, queryClient]);
 
   const unfreezeMutation = useMutation({
     mutationFn: () => toggleMedicalHold({ active: false }),

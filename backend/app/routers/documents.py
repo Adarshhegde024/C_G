@@ -321,6 +321,16 @@ def _check_download_permission(doc: Dict[str, Any], current_user: AuthUser) -> b
         except Exception:
             pass
 
+    # 4. Designated nominee can download if documents are RELEASED
+    if doc.get("release_status") == "RELEASED":
+        from app.database import get_nominee_for_owner
+        nom = get_nominee_for_owner(str(doc.get("owner_id")))
+        if nom:
+            nom_email = (nom.get("email") or "").lower()
+            nom_linked = str(nom.get("linked_user_id") or "")
+            if nom_linked == str(current_user.id) or nom_email == current_user.email.lower():
+                return True
+
     return False
 
 

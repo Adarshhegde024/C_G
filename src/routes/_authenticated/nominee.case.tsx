@@ -5,7 +5,7 @@ import { NomineeCasePage } from "../-nominee.case";
 
 export const Route = createFileRoute("/_authenticated/nominee/case")({
   beforeLoad: ({ context, location }) => {
-    const redirectTo = roleGuard(context.auth.getUser(), ["nominee"]);
+    const redirectTo = roleGuard(context.auth.getUser(), ["nominee", "owner"]);
     if (redirectTo) throw redirect({ to: redirectTo, replace: true, search: { redirect: location.href } });
   },
   head: () => ({

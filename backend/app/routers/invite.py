@@ -20,6 +20,7 @@ from app.database import (
     update_recipient,
     create_profile,
     update_profile,
+    save_notification,
 )
 from app.dependencies import create_access_token
 from app.models.schemas import (
@@ -169,16 +170,12 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     if not target_role:
         raise HTTPException(status_code=404, detail="Invitation token not recognized.")
 
-    # Update recipient / nominee status in local cache & Supabase
-    if record_table == "nominees":
-        update_nominee(str(record_id), {"status": "ACCEPTED", "accepted_at": now_iso})
-    elif record_table == "recipients":
-        update_recipient(str(record_id), {"status": "ACCEPTED", "accepted_at": now_iso})
-
     # Find or create profile for this user
     existing_profile = get_profile_by_email(target_email)
     if existing_profile:
         profile_id = str(existing_profile["id"])
+        # Preserve user's existing primary role (e.g. owner)
+        assigned_role = existing_profile.get("role", "owner" if target_role == "nominee" else target_role)
         if payload.password and not existing_profile.get("password_hash"):
             hashed_pwd = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             update_profile(profile_id, {"password_hash": hashed_pwd, "updated_at": now_iso})
@@ -188,11 +185,13 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
         if payload.password:
             hashed_pwd = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
+        # A nominee signing up receives full vault owner capabilities
+        assigned_role = "owner" if target_role == "nominee" else target_role
         new_profile = {
             "id": profile_id,
             "email": target_email,
             "full_name": target_name,
-            "role": target_role,
+            "role": assigned_role,
             "password_hash": hashed_pwd,
             "account_status": "ACTIVE",
             "created_at": now_iso,
@@ -200,11 +199,41 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
         }
         create_profile(new_profile)
 
+    # Update recipient / nominee status in local cache & Supabase
+    if record_table == "nominees":
+        update_nominee(str(record_id), {
+            "status": "ACCEPTED",
+            "accepted_at": now_iso,
+            "linked_user_id": profile_id,
+        })
+
+        # Send in-app notification to the vault owner
+        owner_id = None
+        if nom and nom.get("owner_id"):
+            owner_id = str(nom["owner_id"])
+        else:
+            n_rec = get_nominee_by_token(token)
+            if n_rec and n_rec.get("owner_id"):
+                owner_id = str(n_rec["owner_id"])
+
+        if owner_id:
+            save_notification({
+                "id": str(uuid.uuid4()),
+                "user_id": owner_id,
+                "title": "Nominee Accepted Invitation",
+                "body": f"{target_name} ({target_email}) has accepted your nominee invitation. Vault emergency contact is active.",
+                "type": "NOMINEE_ACCEPTED",
+                "read": False,
+                "created_at": now_iso,
+            })
+    elif record_table == "recipients":
+        update_recipient(str(record_id), {"status": "ACCEPTED", "accepted_at": now_iso})
+
     auth_user = AuthUser(
         id=profile_id,
         name=target_name,
         email=target_email,
-        role=target_role,
+        role=assigned_role,
         account_status="ACTIVE",
     )
 
@@ -215,5 +244,5 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
         "name": auth_user.name,
     })
 
-    record_audit(profile_id, "INVITATION_ACCEPTED", f"{target_name} accepted {target_role} invitation", "SUCCESS")
+    record_audit(profile_id, "INVITATION_ACCEPTED", f"{target_name} accepted {target_role} invitation (role: {assigned_role})", "SUCCESS")
     return AuthResponse(token=session_jwt, access_token=session_jwt, user=auth_user)
