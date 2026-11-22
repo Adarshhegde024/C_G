@@ -50,7 +50,7 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
       return;
     }
     try {
-      const sample = captureFrame(video, 360);
+      const sample = captureFrame(video, 480);
       const nextSamples = [...samples, sample].slice(0, REQUIRED_SAMPLES);
       setSamples(nextSamples);
       void triggerHaptic("light");
@@ -75,7 +75,7 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
       return;
     }
     try {
-      const sample = captureFrame(video, 360);
+      const sample = captureFrame(video, 480);
       setSamples((current) => current.map((s, i) => (i === index ? sample : s)));
       void triggerHaptic("light");
     } catch {

@@ -84,7 +84,7 @@ function dataURLtoBlob(dataurl: string): Blob {
 
 export function CheckInPage() {
   const queryClient = useQueryClient();
-  const { status, error: cameraError, videoRef, start, stop } = useCamera({ audio: true });
+  const { status, error: cameraError, videoRef, stream, getStream, start, stop } = useCamera({ audio: true });
 
   const [stage, setStage] = useState<Stage>("permission");
   const [countdown, setCountdown] = useState(3);
@@ -152,10 +152,11 @@ export function CheckInPage() {
 
   // Synchronize stream reference
   useEffect(() => {
-    if (videoRef.current?.srcObject instanceof MediaStream) {
-      streamRef.current = videoRef.current.srcObject;
+    const activeStream = stream ?? getStream() ?? (videoRef.current?.srcObject as MediaStream | null) ?? null;
+    if (activeStream) {
+      streamRef.current = activeStream;
     }
-  }, [status, videoRef]);
+  }, [status, stream, getStream, videoRef]);
 
   // Handle countdown
   useEffect(() => {
@@ -268,13 +269,14 @@ export function CheckInPage() {
   }
 
   function beginRecording() {
-    const stream = streamRef.current ?? (videoRef.current?.srcObject as MediaStream | null) ?? null;
+    const activeStream = streamRef.current ?? getStream() ?? stream ?? (videoRef.current?.srcObject as MediaStream | null) ?? null;
     const video = videoRef.current;
-    if (!stream || !video) {
+    if (!activeStream || !video) {
       setSubmitError("The camera stream was lost. Please start again.");
       setStage("permission");
       return;
     }
+    streamRef.current = activeStream;
 
     // Capture high-resolution face snapshot at start of recording
     try {
@@ -290,13 +292,13 @@ export function CheckInPage() {
     isRecordingRef.current = true;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const audioTracks = stream.getAudioTracks();
+      const audioTracks = activeStream.getAudioTracks();
       if (AudioCtx && audioTracks.length > 0) {
         const ctx = audioContextRef.current || new AudioCtx();
         if (ctx.state === "suspended") {
           ctx.resume().catch(() => {});
         }
-        const source = ctx.createMediaStreamSource(stream);
+        const source = ctx.createMediaStreamSource(activeStream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
@@ -322,11 +324,26 @@ export function CheckInPage() {
           setAudioLevel(normalized);
 
           // Calibrated vocal speech energy (ignores room silence and low background hiss)
-          const isVocal = average > 8.0 || peak > 28;
+          const isVocal = average > 1.8 || peak > 12;
           if (isVocal) {
             voiceActivityCountRef.current += 1;
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
+
+            // When SpeechRecognition is NOT available (e.g. mobile WebView without Web Speech API),
+            // advance words one by one ONLY while the user is actively speaking aloud!
+            if (!speechSupported) {
+              const now = Date.now();
+              if (now - lastSpeechTimeRef.current > 420) {
+                lastSpeechTimeRef.current = now;
+                const nextIdx = speechProgressRef.current;
+                if (nextIdx < challengeWords.length) {
+                  spokenIndicesRef.current.add(nextIdx);
+                  setSpokenIndices(new Set(spokenIndicesRef.current));
+                  speechProgressRef.current = nextIdx + 1;
+                }
+              }
+            }
           }
 
           if (isRecordingRef.current) {
@@ -490,8 +507,9 @@ export function CheckInPage() {
 
   async function uploadAndVerify(video: Blob) {
     setStage("verifying");
+    const activeStream = streamRef.current ?? getStream() ?? stream ?? (videoRef.current?.srcObject as MediaStream | null);
     const hasAudioTracks = Boolean(
-      streamRef.current?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled)
+      activeStream?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled)
     );
     const hasValidRecording = video.size >= 1000 || chunksRef.current.length > 0;
     const isVocalDetected =

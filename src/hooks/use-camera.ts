@@ -7,6 +7,8 @@ interface UseCameraResult {
   status: CameraStatus;
   error: string | null;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  stream: MediaStream | null;
+  getStream: () => MediaStream | null;
   start: () => Promise<boolean>;
   stop: () => void;
 }
@@ -134,9 +136,11 @@ export function useCamera(options: { audio?: boolean } = {}): UseCameraResult {
     }
   }, [audio]);
 
+  const getStream = useCallback(() => streamRef.current, []);
+
   useEffect(() => () => stop(), [stop]);
 
-  return { status, error, videoRef, start, stop };
+  return { status, error, videoRef, stream: streamRef.current, getStream, start, stop };
 }
 
 /** Capture the current video frame as a JPEG data URL. */
