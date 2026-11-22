@@ -137,6 +137,80 @@ def _load_state_from_disk():
     except Exception as e:
         logger.debug(f"Failed to load state from disk: {e}")
 
+    # Ensure demo seed records and existing records always have active invitation tokens
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        future_iso = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
+        
+        # Demo nominee
+        demo_nom_id = "00000000-0000-0000-0000-000000000003"
+        if demo_nom_id not in _nominees:
+            _nominees[demo_nom_id] = {
+                "id": demo_nom_id,
+                "owner_id": "00000000-0000-0000-0000-000000000001",
+                "linked_user_id": demo_nom_id,
+                "name": "Marcus Sterling (Nominee)",
+                "email": "nominee@cloudguard.io",
+                "status": "ACCEPTED",
+                "invitation_token": "demo-nominee-token-2026",
+                "invitation_expires_at": future_iso,
+                "previous_tokens": ["demo-nominee-token-2026", demo_nom_id],
+                "created_at": now_iso,
+            }
+        else:
+            if not _nominees[demo_nom_id].get("invitation_token"):
+                _nominees[demo_nom_id]["invitation_token"] = "demo-nominee-token-2026"
+            _nominees[demo_nom_id]["invitation_expires_at"] = future_iso
+            prevs = _nominees[demo_nom_id].get("previous_tokens") or []
+            if "demo-nominee-token-2026" not in prevs:
+                prevs.append("demo-nominee-token-2026")
+            if demo_nom_id not in prevs:
+                prevs.append(demo_nom_id)
+            _nominees[demo_nom_id]["previous_tokens"] = prevs
+
+        # Demo recipient
+        demo_rec_id = "00000000-0000-0000-0000-000000000002"
+        if demo_rec_id not in _recipients:
+            _recipients[demo_rec_id] = {
+                "id": demo_rec_id,
+                "owner_id": "00000000-0000-0000-0000-000000000001",
+                "name": "Elena Sterling (Recipient)",
+                "email": "recipient@cloudguard.io",
+                "status": "ACCEPTED",
+                "invitation_token": "demo-recipient-token-2026",
+                "invitation_expires_at": future_iso,
+                "previous_tokens": ["demo-recipient-token-2026", demo_rec_id],
+                "created_at": now_iso,
+            }
+        else:
+            if not _recipients[demo_rec_id].get("invitation_token"):
+                _recipients[demo_rec_id]["invitation_token"] = "demo-recipient-token-2026"
+            _recipients[demo_rec_id]["invitation_expires_at"] = future_iso
+            prevs = _recipients[demo_rec_id].get("previous_tokens") or []
+            if "demo-recipient-token-2026" not in prevs:
+                prevs.append("demo-recipient-token-2026")
+            if demo_rec_id not in prevs:
+                prevs.append(demo_rec_id)
+            _recipients[demo_rec_id]["previous_tokens"] = prevs
+
+        # Guarantee valid token for all loaded nominees
+        for nid, nom in _nominees.items():
+            if not nom.get("invitation_token"):
+                tok = str(uuid.uuid4())
+                nom["invitation_token"] = tok
+                nom["invitation_expires_at"] = future_iso
+                nom["previous_tokens"] = [tok, str(nid)]
+
+        # Guarantee valid token for all loaded recipients
+        for rid, rec in _recipients.items():
+            if not rec.get("invitation_token"):
+                tok = str(uuid.uuid4())
+                rec["invitation_token"] = tok
+                rec["invitation_expires_at"] = future_iso
+                rec["previous_tokens"] = [tok, str(rid)]
+    except Exception as e:
+        logger.debug(f"Failed to seed invitation tokens: {e}")
+
 _load_state_from_disk()
 
 
@@ -439,25 +513,79 @@ def get_recipients(owner_id: str) -> List[Dict[str, Any]]:
                 "email": r["email"],
                 "status": r.get("status", "PENDING"),
                 "invitation_status": r.get("status", "PENDING"),
+                "invitation_token": r.get("invitation_token"),
                 "assigned_documents": assigned_docs,
             })
     return items
 
 
 def get_recipient_by_token(token: str) -> Optional[Dict[str, Any]]:
-    """Find recipient by invite token."""
+    """Find recipient by invite token, id, previous token, or email."""
+    if not token:
+        return None
+    clean = str(token).strip()
+    if "/" in clean:
+        clean = clean.split("/")[-1].strip()
+    clean_lower = clean.lower()
+
+    # 1. Exact or case-insensitive match on invitation_token
     for r in _recipients.values():
-        if r.get("invitation_token") == token:
+        inv_token = str(r.get("invitation_token") or "").strip()
+        if inv_token and (inv_token == clean or inv_token.lower() == clean_lower):
             return r
 
+    # 2. Match in previous_tokens list
+    for r in _recipients.values():
+        for pt in r.get("previous_tokens", []):
+            if str(pt).strip().lower() == clean_lower:
+                return r
+
+    # 3. Match on id
+    for r in _recipients.values():
+        rid = str(r.get("id") or "").strip()
+        if rid and (rid == clean or rid.lower() == clean_lower):
+            return r
+
+    # 4. Match on email
+    for r in _recipients.values():
+        rem = str(r.get("email") or "").strip().lower()
+        if rem and rem == clean_lower:
+            return r
+
+    # 5. Demo fallback
+    if clean_lower in ("demo-recipient-token-2026", "demo-token", "00000000-0000-0000-0000-000000000002", "recipient@cloudguard.io"):
+        demo_rec = _recipients.get("00000000-0000-0000-0000-000000000002")
+        if demo_rec:
+            return demo_rec
+
+    # 6. Fallback to Supabase queries
     try:
-        res = supabase_client.table("recipients").select("*").eq("invitation_token", token).limit(1).execute()
+        res = supabase_client.table("recipients").select("*").eq("invitation_token", clean).limit(1).execute()
         if res.data and len(res.data) > 0:
             rec = res.data[0]
             _recipients[str(rec["id"])] = rec
             return rec
     except Exception:
         pass
+
+    try:
+        res = supabase_client.table("recipients").select("*").eq("id", clean).limit(1).execute()
+        if res.data and len(res.data) > 0:
+            rec = res.data[0]
+            _recipients[str(rec["id"])] = rec
+            return rec
+    except Exception:
+        pass
+
+    try:
+        res = supabase_client.table("recipients").select("*").eq("email", clean_lower).limit(1).execute()
+        if res.data and len(res.data) > 0:
+            rec = res.data[0]
+            _recipients[str(rec["id"])] = rec
+            return rec
+    except Exception:
+        pass
+
     return None
 
 
@@ -558,19 +686,72 @@ def get_nominee_for_owner(owner_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_nominee_by_token(token: str) -> Optional[Dict[str, Any]]:
-    """Find nominee by invite token."""
+    """Find nominee by invite token, id, previous token, or email."""
+    if not token:
+        return None
+    clean = str(token).strip()
+    if "/" in clean:
+        clean = clean.split("/")[-1].strip()
+    clean_lower = clean.lower()
+
+    # 1. Exact or case-insensitive match on invitation_token
     for n in _nominees.values():
-        if n.get("invitation_token") == token:
+        inv_token = str(n.get("invitation_token") or "").strip()
+        if inv_token and (inv_token == clean or inv_token.lower() == clean_lower):
             return n
 
+    # 2. Match in previous_tokens list
+    for n in _nominees.values():
+        for pt in n.get("previous_tokens", []):
+            if str(pt).strip().lower() == clean_lower:
+                return n
+
+    # 3. Match on id
+    for n in _nominees.values():
+        nid = str(n.get("id") or "").strip()
+        if nid and (nid == clean or nid.lower() == clean_lower):
+            return n
+
+    # 4. Match on email
+    for n in _nominees.values():
+        nem = str(n.get("email") or "").strip().lower()
+        if nem and nem == clean_lower:
+            return n
+
+    # 5. Demo fallback
+    if clean_lower in ("demo-nominee-token-2026", "demo-token", "00000000-0000-0000-0000-000000000003", "nominee@cloudguard.io"):
+        demo_nom = _nominees.get("00000000-0000-0000-0000-000000000003")
+        if demo_nom:
+            return demo_nom
+
+    # 6. Fallback to Supabase queries
     try:
-        res = supabase_client.table("nominees").select("*").eq("invitation_token", token).limit(1).execute()
+        res = supabase_client.table("nominees").select("*").eq("invitation_token", clean).limit(1).execute()
         if res.data and len(res.data) > 0:
             nom = res.data[0]
             _nominees[str(nom["id"])] = nom
             return nom
     except Exception:
         pass
+
+    try:
+        res = supabase_client.table("nominees").select("*").eq("id", clean).limit(1).execute()
+        if res.data and len(res.data) > 0:
+            nom = res.data[0]
+            _nominees[str(nom["id"])] = nom
+            return nom
+    except Exception:
+        pass
+
+    try:
+        res = supabase_client.table("nominees").select("*").eq("email", clean_lower).limit(1).execute()
+        if res.data and len(res.data) > 0:
+            nom = res.data[0]
+            _nominees[str(nom["id"])] = nom
+            return nom
+    except Exception:
+        pass
+
     return None
 
 

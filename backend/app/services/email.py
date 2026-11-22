@@ -266,9 +266,11 @@ def send_nominee_invitation_email(
     nominee_email: str,
     owner_name: str,
     token: str,
+    frontend_base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sends invitation to a designated nominee with their one-time setup link."""
-    invite_url = f"{FRONTEND_URL}/invite/{token}"
+    base_url = frontend_base_url.rstrip("/") if frontend_base_url else FRONTEND_URL
+    invite_url = f"{base_url}/invite/{token}"
     subject = f"Action Required: You have been designated as a CloudGuard Legacy Nominee by {owner_name}"
     preheader = f"{owner_name} designated you as their trusted legacy nominee."
 
@@ -297,7 +299,7 @@ As a nominee, you will only participate in verification if {owner_name} misses c
 Please accept your invitation and create your access credentials by visiting:
 {invite_url}
 
-This invitation link is valid for 7 days.
+This invitation link is valid for 14 days.
 CloudGuard Security Team"""
 
     html = _wrap_email_html(
@@ -315,9 +317,11 @@ def send_recipient_invitation_email(
     recipient_email: str,
     owner_name: str,
     token: str,
+    frontend_base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sends invitation to a trusted recipient."""
-    invite_url = f"{FRONTEND_URL}/invite/{token}"
+    base_url = frontend_base_url.rstrip("/") if frontend_base_url else FRONTEND_URL
+    invite_url = f"{base_url}/invite/{token}"
     subject = f"You have been added as a trusted document recipient by {owner_name} on CloudGuard"
     preheader = f"{owner_name} added you as a trusted recipient."
 

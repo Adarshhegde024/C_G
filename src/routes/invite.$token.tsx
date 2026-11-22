@@ -50,6 +50,9 @@ interface InvitationInfo {
 
 function InvitePage() {
   const { token } = useParams({ from: Route.id });
+  const rawToken = decodeURIComponent(token || "").trim();
+  const cleanToken = rawToken.includes("/") ? rawToken.split("/").pop()!.trim() : rawToken;
+
   const router = useRouter();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
@@ -64,7 +67,11 @@ function InvitePage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchInvitation(token)
+    if (!cleanToken) {
+      setLoadError("Invalid invitation token provided.");
+      return;
+    }
+    fetchInvitation(cleanToken)
       .then((data) => {
         if (!cancelled) setInfo(data);
       })
@@ -74,13 +81,16 @@ function InvitePage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [cleanToken]);
 
   async function handleAccept() {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await acceptInvitation(token, password || undefined);
+      const response = await acceptInvitation(cleanToken, password || undefined);
+      if (response?.token) {
+        setToken(response.token);
+      }
       setAccepted(true);
       setAcceptedResponse(response);
       toast.success("Nomination successfully confirmed.");
@@ -99,7 +109,7 @@ function InvitePage() {
         void navigate({ to: homeForRole(role), replace: true });
       });
     } else {
-      void navigate({ to: "/login" });
+      void navigate({ to: "/dashboard", replace: true });
     }
   }
 
@@ -110,13 +120,13 @@ function InvitePage() {
         void navigate({ to: "/nominee/case", replace: true });
       });
     } else {
-      void navigate({ to: "/login" });
+      void navigate({ to: "/nominee/case", replace: true });
     }
   }
 
   const isNominee = info?.role === "nominee";
   const ownerName = info?.vault_owner || info?.inviter_name || "the vault owner";
-  const needsPassword = info?.status === "PENDING";
+  const needsPassword = info?.status === "PENDING" && !currentUser;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">

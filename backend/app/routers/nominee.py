@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 import uuid
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request, status
 
 from app.dependencies import get_current_user
 from app.models.schemas import (
@@ -43,16 +43,56 @@ logger = logging.getLogger("cloudguard.nominee")
 router = APIRouter(prefix="/api/nominee", tags=["Nominee"])
 
 
+def _get_request_frontend_base(request: Optional[Request] = None) -> Optional[str]:
+    """Dynamically determine frontend base URL from request origin/referer, with FRONTEND_URL fallback."""
+    if request:
+        origin = request.headers.get("origin") or request.headers.get("referer")
+        if origin:
+            try:
+                from urllib.parse import urlparse
+                p = urlparse(origin)
+                if p.scheme and p.netloc:
+                    return f"{p.scheme}://{p.netloc}"
+            except Exception:
+                pass
+    return None
+
+
+def _build_invite_link(token: str, request: Optional[Request] = None) -> str:
+    """Builds a fully-qualified invite link tailored to current caller's origin."""
+    base = _get_request_frontend_base(request) or FRONTEND_URL
+    return f"{base.rstrip('/')}/invite/{token}"
+
+
 # ---- Owner Nominee Configuration -------------------------------------------
 
 @router.get("", response_model=Optional[Nominee])
-async def get_nominee(current_user: AuthUser = Depends(get_current_user)):
+async def get_nominee(
+    request: Request,
+    current_user: AuthUser = Depends(get_current_user),
+):
     """Returns the nominee configured for the vault owner."""
     raw = get_nominee_for_owner(current_user.id)
     if not raw:
         return None
     token = raw.get("invitation_token")
-    inv_link = f"{FRONTEND_URL}/invite/{token}" if token else None
+    if not token:
+        # Guarantee active invitation token exists for any configured nominee
+        token = str(uuid.uuid4())
+        raw["invitation_token"] = token
+        raw["invitation_expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+        prevs = list(raw.get("previous_tokens") or [])
+        if token not in prevs:
+            prevs.append(token)
+        if str(raw.get("id")) not in prevs:
+            prevs.append(str(raw.get("id")))
+        raw["previous_tokens"] = prevs
+        db_update_nominee(str(raw["id"]), {
+            "invitation_token": token,
+            "invitation_expires_at": raw["invitation_expires_at"],
+            "previous_tokens": prevs,
+        })
+    inv_link = _build_invite_link(token, request)
     return Nominee(
         id=str(raw["id"]),
         name=raw["name"],
@@ -65,6 +105,7 @@ async def get_nominee(current_user: AuthUser = Depends(get_current_user)):
 @router.post("", response_model=Nominee)
 async def save_nominee(
     payload: SaveNomineePayload,
+    request: Request,
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Creates a new nominee designation for the vault owner."""
@@ -72,6 +113,7 @@ async def save_nominee(
     email = payload.email.strip().lower()
     nom_id = str(uuid.uuid4())
     token = str(uuid.uuid4())
+    expires_iso = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
 
     entry = {
         "id": nom_id,
@@ -80,7 +122,8 @@ async def save_nominee(
         "email": email,
         "status": "PENDING",
         "invitation_token": token,
-        "invitation_expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "previous_tokens": [token, nom_id],
+        "invitation_expires_at": expires_iso,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -90,6 +133,7 @@ async def save_nominee(
     # Send real invitation email in background thread so request completes immediately
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
+    frontend_base = _get_request_frontend_base(request)
     import asyncio
     try:
         loop = asyncio.get_running_loop()
@@ -100,6 +144,7 @@ async def save_nominee(
             email,
             owner_name,
             token,
+            frontend_base,
         )
     except Exception:
         send_nominee_invitation_email(
@@ -107,9 +152,10 @@ async def save_nominee(
             nominee_email=email,
             owner_name=owner_name,
             token=token,
+            frontend_base_url=frontend_base,
         )
 
-    inv_link = f"{FRONTEND_URL}/invite/{token}"
+    inv_link = _build_invite_link(token, request)
     return Nominee(
         id=nom_id,
         name=saved["name"],
@@ -122,22 +168,39 @@ async def save_nominee(
 @router.patch("", response_model=Nominee)
 async def update_nominee(
     payload: SaveNomineePayload,
+    request: Request,
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Updates the existing nominee details."""
     nom = get_nominee_for_owner(current_user.id)
     if not nom:
         raise HTTPException(status_code=404, detail="Nominee not found.")
+    new_email = payload.email.strip().lower()
+    token = nom.get("invitation_token")
     patch = {
         "name": payload.name.strip(),
-        "email": payload.email.strip().lower(),
+        "email": new_email,
     }
+    if not token or new_email != nom.get("email", "").lower():
+        old_token = token
+        token = str(uuid.uuid4())
+        prevs = list(nom.get("previous_tokens") or [])
+        if old_token and old_token not in prevs:
+            prevs.append(old_token)
+        if str(nom.get("id")) not in prevs:
+            prevs.append(str(nom.get("id")))
+        if token not in prevs:
+            prevs.append(token)
+        patch["invitation_token"] = token
+        patch["previous_tokens"] = prevs
+        patch["invitation_expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+        patch["status"] = "PENDING"
+
     n = db_update_nominee(str(nom["id"]), patch)
     if not n:
         raise HTTPException(status_code=404, detail="Nominee not found.")
     record_audit(current_user.id, "NOMINEE_UPDATED", f"Updated nominee: {payload.name}", "SUCCESS")
-    token = n.get("invitation_token")
-    inv_link = f"{FRONTEND_URL}/invite/{token}" if token else None
+    inv_link = _build_invite_link(token, request)
     return Nominee(
         id=str(n["id"]),
         name=n["name"],
@@ -156,22 +219,35 @@ async def remove_nominee(current_user: AuthUser = Depends(get_current_user)):
 
 
 @router.post("/invite", response_model=Nominee)
-async def invite_nominee(current_user: AuthUser = Depends(get_current_user)):
+async def invite_nominee(
+    request: Request,
+    current_user: AuthUser = Depends(get_current_user),
+):
     """Sends or resends the nominee verification invitation."""
     nom = get_nominee_for_owner(current_user.id)
     if not nom:
         raise HTTPException(status_code=404, detail="No nominee configured.")
+    old_token = nom.get("invitation_token")
     token = str(uuid.uuid4())
-    expires = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    prevs = list(nom.get("previous_tokens") or [])
+    if old_token and old_token not in prevs:
+        prevs.append(old_token)
+    if str(nom.get("id")) not in prevs:
+        prevs.append(str(nom.get("id")))
+    if token not in prevs:
+        prevs.append(token)
+    expires = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
     n = db_update_nominee(str(nom["id"]), {
         "status": "PENDING",
         "invitation_token": token,
+        "previous_tokens": prevs,
         "invitation_expires_at": expires,
     })
     
     # Send / resend real invitation email in background
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
+    frontend_base = _get_request_frontend_base(request)
     import asyncio
     try:
         loop = asyncio.get_running_loop()
@@ -182,6 +258,7 @@ async def invite_nominee(current_user: AuthUser = Depends(get_current_user)):
             n["email"],
             owner_name,
             token,
+            frontend_base,
         )
     except Exception:
         send_nominee_invitation_email(
@@ -189,10 +266,11 @@ async def invite_nominee(current_user: AuthUser = Depends(get_current_user)):
             nominee_email=n["email"],
             owner_name=owner_name,
             token=token,
+            frontend_base_url=frontend_base,
         )
     
     record_audit(current_user.id, "NOMINEE_INVITATION_SENT", f"Sent invitation to {n.get('email')}", "SUCCESS")
-    inv_link = f"{FRONTEND_URL}/invite/{token}"
+    inv_link = _build_invite_link(token, request)
     return Nominee(
         id=str(n["id"]),
         name=n["name"],

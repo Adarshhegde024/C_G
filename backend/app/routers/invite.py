@@ -38,41 +38,78 @@ router = APIRouter(prefix="/api/invite", tags=["Invitations"])
 @router.get("/{token}", response_model=InvitationDetails)
 async def get_invitation(token: str):
     """Fetches details for an invitation token (recipient or nominee)."""
+    clean_token = str(token).strip()
+    if "/" in clean_token:
+        clean_token = clean_token.split("/")[-1].strip()
+
     # 1. Check in database repository (memory & persistent disk cache)
-    nom = get_nominee_by_token(token)
+    nom = get_nominee_by_token(clean_token)
     if nom:
         owner_name = "Vault Owner"
         if nom.get("owner_id"):
             prof = get_profile_by_id(str(nom["owner_id"])) or {}
             owner_name = prof.get("full_name") or "Vault Owner"
+
+        # Ensure invitation is not expired - auto-renew if expired or missing so invited nominee is never locked out
+        expires_at = nom.get("invitation_expires_at")
+        now_dt = datetime.now(timezone.utc)
+        if not expires_at:
+            expires_at = (now_dt + timedelta(days=14)).isoformat()
+            update_nominee(str(nom["id"]), {"invitation_expires_at": expires_at})
+        else:
+            try:
+                exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp_dt < now_dt:
+                    expires_at = (now_dt + timedelta(days=14)).isoformat()
+                    update_nominee(str(nom["id"]), {"invitation_expires_at": expires_at})
+            except Exception:
+                pass
+
         return InvitationDetails(
             email=nom["email"],
             inviter_name=owner_name,
             vault_owner=owner_name,
             role="nominee",
             status=nom.get("status", "PENDING"),
-            expires_at=nom.get("invitation_expires_at"),
+            expires_at=expires_at,
         )
 
-    rec = get_recipient_by_token(token)
+    rec = get_recipient_by_token(clean_token)
     if rec:
         owner_name = "Vault Owner"
         if rec.get("owner_id"):
             prof = get_profile_by_id(str(rec["owner_id"])) or {}
             owner_name = prof.get("full_name") or "Vault Owner"
+
+        expires_at = rec.get("invitation_expires_at")
+        now_dt = datetime.now(timezone.utc)
+        if not expires_at:
+            expires_at = (now_dt + timedelta(days=14)).isoformat()
+            update_recipient(str(rec["id"]), {"invitation_expires_at": expires_at})
+        else:
+            try:
+                exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp_dt < now_dt:
+                    expires_at = (now_dt + timedelta(days=14)).isoformat()
+                    update_recipient(str(rec["id"]), {"invitation_expires_at": expires_at})
+            except Exception:
+                pass
+
         return InvitationDetails(
             email=rec["email"],
             inviter_name=owner_name,
             vault_owner=owner_name,
             role="recipient",
             status=rec.get("status", "PENDING"),
-            expires_at=rec.get("invitation_expires_at"),
+            expires_at=expires_at,
         )
 
     # 2. Plain Supabase query without fragile foreign key join syntax
     supabase = get_supabase()
     try:
-        rec_res = supabase.table("recipients").select("*").eq("invitation_token", token).limit(1).execute()
+        rec_res = supabase.table("recipients").select("*").eq("invitation_token", clean_token).limit(1).execute()
+        if not rec_res.data:
+            rec_res = supabase.table("recipients").select("*").eq("id", clean_token).limit(1).execute()
         if rec_res.data:
             r = rec_res.data[0]
             owner_name = "Vault Owner"
@@ -91,7 +128,9 @@ async def get_invitation(token: str):
         logger.debug(f"Invite recipient Supabase lookup: {e}")
 
     try:
-        nom_res = supabase.table("nominees").select("*").eq("invitation_token", token).limit(1).execute()
+        nom_res = supabase.table("nominees").select("*").eq("invitation_token", clean_token).limit(1).execute()
+        if not nom_res.data:
+            nom_res = supabase.table("nominees").select("*").eq("id", clean_token).limit(1).execute()
         if nom_res.data:
             n = nom_res.data[0]
             owner_name = "Vault Owner"
@@ -118,6 +157,10 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     Accepts invitation, creates or links authenticated profile,
     and returns a signed session token routed to their role home.
     """
+    clean_token = str(token).strip()
+    if "/" in clean_token:
+        clean_token = clean_token.split("/")[-1].strip()
+
     supabase = get_supabase()
     target_role = None
     target_email = None
@@ -127,8 +170,8 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # Search in memory repository first
-    rec = get_recipient_by_token(token)
-    nom = get_nominee_by_token(token)
+    rec = get_recipient_by_token(clean_token)
+    nom = get_nominee_by_token(clean_token)
 
     if rec:
         target_role = "recipient"
@@ -145,7 +188,9 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     else:
         # Fallback to Supabase
         try:
-            rec_res = supabase.table("recipients").select("*").eq("invitation_token", token).limit(1).execute()
+            rec_res = supabase.table("recipients").select("*").eq("invitation_token", clean_token).limit(1).execute()
+            if not rec_res.data:
+                rec_res = supabase.table("recipients").select("*").eq("id", clean_token).limit(1).execute()
             if rec_res.data:
                 target_role = "recipient"
                 target_email = rec_res.data[0]["email"].strip().lower()
@@ -157,7 +202,9 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
 
         if not target_role:
             try:
-                nom_res = supabase.table("nominees").select("*").eq("invitation_token", token).limit(1).execute()
+                nom_res = supabase.table("nominees").select("*").eq("invitation_token", clean_token).limit(1).execute()
+                if not nom_res.data:
+                    nom_res = supabase.table("nominees").select("*").eq("id", clean_token).limit(1).execute()
                 if nom_res.data:
                     target_role = "nominee"
                     target_email = nom_res.data[0]["email"].strip().lower()

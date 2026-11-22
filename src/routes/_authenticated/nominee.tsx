@@ -38,8 +38,24 @@ function NomineePage() {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const getNormalizedInviteLink = (rawLink: string | null | undefined): string => {
+    if (!rawLink) return "";
+    try {
+      if (typeof window !== "undefined" && window.location?.origin) {
+        const match = rawLink.match(/\/invite\/[^/?#]+/);
+        if (match) {
+          return `${window.location.origin}${match[0]}`;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return rawLink;
+  };
+
   const handleCopyLink = (link: string) => {
-    navigator.clipboard.writeText(link);
+    const normalized = getNormalizedInviteLink(link);
+    navigator.clipboard.writeText(normalized);
     setCopied(true);
     toast.success("Invitation link copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
@@ -210,7 +226,7 @@ function NomineePage() {
                   </button>
                 </div>
                 <p className="truncate font-mono text-[11px] text-muted-foreground select-all bg-background/80 p-1.5 rounded border border-border/40">
-                  {nominee.invitation_link}
+                  {getNormalizedInviteLink(nominee.invitation_link)}
                 </p>
                 <p className="text-[11px]">
                   If automated email delivery is delayed, you can directly share this link with your nominee via message or email.

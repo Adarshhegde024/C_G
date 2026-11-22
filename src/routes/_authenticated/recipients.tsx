@@ -122,8 +122,24 @@ function RecipientsPage() {
   const [removing, setRemoving] = useState<Recipient | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const getNormalizedRecipientLink = (rawLink: string | null | undefined): string => {
+    if (!rawLink) return "";
+    try {
+      if (typeof window !== "undefined" && window.location?.origin) {
+        const match = rawLink.match(/\/invite\/[^/?#]+/);
+        if (match) {
+          return `${window.location.origin}${match[0]}`;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return rawLink;
+  };
+
   const handleCopyRecipientLink = (id: string, link: string) => {
-    navigator.clipboard.writeText(link);
+    const normalized = getNormalizedRecipientLink(link);
+    navigator.clipboard.writeText(normalized);
     setCopiedId(id);
     toast.success("Invitation link copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
