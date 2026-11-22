@@ -169,7 +169,7 @@ export function CheckInPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, countdown]);
 
-  // Handle elapsed recording time & progressive word reading tracker
+  // Handle elapsed recording time
   useEffect(() => {
     if (stage !== "recording") return;
     const started = Date.now();
@@ -177,26 +177,9 @@ export function CheckInPage() {
       const now = Date.now();
       const secs = Math.floor((now - started) / 1000);
       setElapsed(secs);
-
-      // Smooth reading cadence timer across the 10-second recording window
-      // Automatically advances through challenge words as user reads aloud
-      if (challengeWords.length > 0) {
-        const wordInterval = Math.max(500, Math.floor((RECORDING_SECONDS * 1000) / challengeWords.length));
-        const cadenceIdx = Math.min(challengeWords.length - 1, Math.floor((now - started) / wordInterval));
-        if (cadenceIdx >= 0) {
-          const updated = new Set(spokenIndicesRef.current);
-          for (let i = 0; i <= cadenceIdx; i++) {
-            updated.add(i);
-          }
-          spokenIndicesRef.current = updated;
-          setSpokenIndices(new Set(updated));
-          setVoiceDetected(true);
-          voiceDetectedRef.current = true;
-        }
-      }
     }, 250);
     return () => clearInterval(id);
-  }, [stage, challengeWords.length]);
+  }, [stage]);
 
   // Cleanup helper for Web Audio analyser
   function stopAudioAnalyser() {
@@ -338,22 +321,25 @@ export function CheckInPage() {
           const normalized = Math.min(1, Math.max(average / 40, peak / 180));
           setAudioLevel(normalized);
 
-          // Human speech energy threshold (mobile microphone calibrated)
-          const isVocal = average > 1.0 || peak > 10;
+          // Calibrated vocal speech energy (ignores room silence and low background hiss)
+          const isVocal = average > 8.0 || peak > 28;
           if (isVocal) {
             voiceActivityCountRef.current += 1;
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
 
-            // Progressive word cadence highlighting for mobile WebView
-            const now = Date.now();
-            if (now - lastSpeechTimeRef.current > 380) {
-              lastSpeechTimeRef.current = now;
-              const nextIdx = speechProgressRef.current;
-              if (nextIdx < challengeWords.length) {
-                spokenIndicesRef.current.add(nextIdx);
-                setSpokenIndices(new Set(spokenIndicesRef.current));
-                speechProgressRef.current = nextIdx + 1;
+            // When SpeechRecognition is NOT available (e.g. mobile WebView without Web Speech API),
+            // advance words one by one only when real voice utterance energy is detected
+            if (!speechSupported) {
+              const now = Date.now();
+              if (now - lastSpeechTimeRef.current > 500) {
+                lastSpeechTimeRef.current = now;
+                const nextIdx = speechProgressRef.current;
+                if (nextIdx < challengeWords.length) {
+                  spokenIndicesRef.current.add(nextIdx);
+                  setSpokenIndices(new Set(spokenIndicesRef.current));
+                  speechProgressRef.current = nextIdx + 1;
+                }
               }
             }
           }
@@ -389,29 +375,51 @@ export function CheckInPage() {
           const text = full.trim();
           setTranscript(text);
 
-          const matched = new Set(
-            text
-              .toLowerCase()
-              .replace(/[^\w\s]/g, " ")
-              .split(/\s+/)
-              .filter(Boolean)
-          );
-          setSpokenWords(matched);
+          const tokens = text
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ")
+            .split(/\s+/)
+            .filter(Boolean);
+          const matchedSet = new Set(tokens);
+          setSpokenWords(matchedSet);
 
-          // Update word indices matching recognized speech tokens
-          const updated = new Set(spokenIndicesRef.current);
-          challengeWords.forEach((w, idx) => {
-            const clean = w.toLowerCase().replace(/[^\w]/g, "");
-            if (matched.has(clean)) {
-              updated.add(idx);
+          // Match words in sequential order so words only tick as user speaks them
+          const updated = new Set<number>();
+          let tokenPointer = 0;
+          for (let i = 0; i < challengeWords.length; i++) {
+            const clean = challengeWords[i].toLowerCase().replace(/[^\w]/g, "");
+            let foundIndex = -1;
+            for (let t = tokenPointer; t < tokens.length; t++) {
+              if (
+                tokens[t] === clean ||
+                (clean.length > 3 && tokens[t].includes(clean)) ||
+                (tokens[t].length > 3 && clean.includes(tokens[t]))
+              ) {
+                foundIndex = t;
+                break;
+              }
             }
-          });
+            if (foundIndex !== -1) {
+              updated.add(i);
+              tokenPointer = foundIndex + 1;
+            } else if (matchedSet.has(clean) && i <= updated.size) {
+              updated.add(i);
+            }
+          }
           spokenIndicesRef.current = updated;
           setSpokenIndices(new Set(updated));
 
           if (text.length > 2) {
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
+          }
+        };
+
+        recognition.onend = () => {
+          if (isRecordingRef.current) {
+            try {
+              recognition.start();
+            } catch {}
           }
         };
 
