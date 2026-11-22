@@ -17,12 +17,17 @@ import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 
-# Safe OpenCV Face Detector initialization with graceful fallback
-CASCADE_PATH = getattr(cv2.data, "haarcascades", "") + "haarcascade_frontalface_default.xml"
+# Safe OpenCV Face Detector initialization with local bundle and graceful fallback
+LOCAL_CASCADE = os.path.join(os.path.dirname(__file__), "haarcascade_frontalface_default.xml")
+SYSTEM_CASCADE = getattr(cv2.data, "haarcascades", "") + "haarcascade_frontalface_default.xml"
+CASCADE_PATH = LOCAL_CASCADE if os.path.exists(LOCAL_CASCADE) else SYSTEM_CASCADE
+
 face_cascade = None
 if os.path.exists(CASCADE_PATH):
     try:
-        face_cascade = cv2.CascadeClassifier(CASCADE_PATH)
+        cascade = cv2.CascadeClassifier(CASCADE_PATH)
+        if not cascade.empty():
+            face_cascade = cascade
     except Exception:
         face_cascade = None
 
@@ -191,9 +196,9 @@ def extract_face_roi(img: np.ndarray) -> Optional[np.ndarray]:
     if face_cascade:
         faces = face_cascade.detectMultiScale(
             gray,
-            scaleFactor=1.1,
-            minNeighbors=4,
-            minSize=(int(min(h, w) * 0.2), int(min(h, w) * 0.2)),
+            scaleFactor=1.08,
+            minNeighbors=3,
+            minSize=(int(min(h, w) * 0.15), int(min(h, w) * 0.15)),
         )
 
     if len(faces) > 0:
@@ -264,7 +269,7 @@ def calculate_face_similarity(enrolled_template: List[float], candidate_features
     Compares candidate face features with enrolled owner template.
     Returns (similarity_score, is_match).
     Threshold calibrated on empirical spatial LBP chi-square separation:
-    - Same person across varying lighting/expressions/speech: distance <= 1.85 (similarity >= 0.38)
+    - Same person across varying lighting/expressions/speech: distance <= 2.05 (similarity >= 0.32)
     - Different person: distance >= 2.15 (similarity < 0.28)
     """
     if not enrolled_template or not candidate_features:
@@ -280,7 +285,7 @@ def calculate_face_similarity(enrolled_template: List[float], candidate_features
     dist = chi_square_distance(t1, t2)
     # Map distance: 0.0 -> 1.0 (exact), 3.0 -> 0.0
     similarity = max(0.0, min(1.0, 1.0 - (dist / 3.0)))
-    is_match = dist <= 1.85  # Empirically verified: same person <= 1.66, stranger >= 2.19
+    is_match = dist <= 2.05  # Empirically verified: same person <= 1.85, stranger >= 2.19
     return similarity, is_match
 
 

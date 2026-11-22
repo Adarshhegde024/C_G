@@ -327,21 +327,6 @@ export function CheckInPage() {
             voiceActivityCountRef.current += 1;
             setVoiceDetected(true);
             voiceDetectedRef.current = true;
-
-            // When SpeechRecognition is NOT available (e.g. mobile WebView without Web Speech API),
-            // advance words one by one only when real voice utterance energy is detected
-            if (!speechSupported) {
-              const now = Date.now();
-              if (now - lastSpeechTimeRef.current > 500) {
-                lastSpeechTimeRef.current = now;
-                const nextIdx = speechProgressRef.current;
-                if (nextIdx < challengeWords.length) {
-                  spokenIndicesRef.current.add(nextIdx);
-                  setSpokenIndices(new Set(spokenIndicesRef.current));
-                  speechProgressRef.current = nextIdx + 1;
-                }
-              }
-            }
           }
 
           if (isRecordingRef.current) {
@@ -607,8 +592,7 @@ export function CheckInPage() {
             <div className="rounded-lg bg-vault p-4 text-vault-foreground border border-border shadow-inner">
               <div className="flex flex-wrap items-center gap-2 text-base sm:text-lg font-medium leading-relaxed">
                 {challengeWords.map((word, idx) => {
-                  const clean = word.toLowerCase().replace(/[^\w]/g, "");
-                  const isSpoken = spokenWords.has(clean) || spokenIndices.has(idx);
+                  const isSpoken = spokenIndices.has(idx);
                   const isCurrent = stage === "recording" && !isSpoken && (idx === 0 || spokenIndices.has(idx - 1));
                   return (
                     <span
