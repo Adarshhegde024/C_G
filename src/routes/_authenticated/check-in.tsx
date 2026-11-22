@@ -428,10 +428,26 @@ export function CheckInPage() {
 
     chunksRef.current = [];
     try {
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm";
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_500_000 });
+      const candidates = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+        "video/mp4;codecs=h264,aac",
+        "video/mp4",
+      ];
+      let selectedMimeType = "";
+      if (typeof MediaRecorder.isTypeSupported === "function") {
+        selectedMimeType = candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+      }
+      const options = selectedMimeType
+        ? { mimeType: selectedMimeType, videoBitsPerSecond: 1_500_000 }
+        : { videoBitsPerSecond: 1_500_000 };
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, options);
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
@@ -443,10 +459,15 @@ export function CheckInPage() {
           } catch {}
         }
         stopAudioAnalyser();
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const blobType = recorder.mimeType || selectedMimeType || "video/webm";
+        const blob = new Blob(chunksRef.current, { type: blobType });
         void uploadAndVerify(blob);
       };
-      recorder.start(500);
+      try {
+        recorder.start(500);
+      } catch {
+        recorder.start();
+      }
       recorderRef.current = recorder;
       setStage("recording");
 
@@ -816,20 +837,10 @@ export function CheckInPage() {
                   <Button
                     variant="accent"
                     className="sm:ml-auto"
-                    disabled={!challenge || challengeLoading}
                     onClick={beginCountdown}
                   >
-                    {!challenge || challengeLoading ? (
-                      <>
-                        <Spinner className="h-4 w-4 mr-2 text-white" />
-                        Preparing phrase…
-                      </>
-                    ) : (
-                      <>
-                        <Video className="h-4 w-4 mr-2" aria-hidden />
-                        Start Verification
-                      </>
-                    )}
+                    <Video className="h-4 w-4 mr-2" aria-hidden />
+                    Start Verification
                   </Button>
                 </>
               ) : null}

@@ -74,7 +74,18 @@ public class MainActivity extends BridgeActivity {
                                     pendingPermissionRequest = request;
                                     ActivityCompat.requestPermissions(MainActivity.this, needed.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
                                 } else {
-                                    request.grant(request.getResources());
+                                    List<String> grantedResources = new ArrayList<>();
+                                    if (resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE) && hasCamera) {
+                                        grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
+                                    }
+                                    if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE) && hasAudio) {
+                                        grantedResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+                                    }
+                                    if (!grantedResources.isEmpty()) {
+                                        request.grant(grantedResources.toArray(new String[0]));
+                                    } else {
+                                        request.deny();
+                                    }
                                 }
                             });
                         }
@@ -90,11 +101,27 @@ public class MainActivity extends BridgeActivity {
         if (requestCode == PERMISSIONS_REQUEST_CODE && pendingPermissionRequest != null) {
             runOnUiThread(() -> {
                 try {
+                    List<String> requested = Arrays.asList(pendingPermissionRequest.getResources());
                     List<String> grantedResources = new ArrayList<>();
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+
+                    boolean cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+                    boolean audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+
+                    if (permissions != null && grantResults != null) {
+                        for (int i = 0; i < permissions.length; i++) {
+                            if (Manifest.permission.CAMERA.equals(permissions[i]) && grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                                cameraGranted = true;
+                            }
+                            if (Manifest.permission.RECORD_AUDIO.equals(permissions[i]) && grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                                audioGranted = true;
+                            }
+                        }
+                    }
+
+                    if (requested.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE) && cameraGranted) {
                         grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
                     }
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    if (requested.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE) && audioGranted) {
                         grantedResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
                     }
 

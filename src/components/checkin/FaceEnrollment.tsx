@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Camera, RotateCcw, Trash2, Video } from "lucide-react";
+import { toast } from "sonner";
 
 import { captureFrame, useCamera } from "@/hooks/use-camera";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { triggerHaptic } from "@/lib/native";
 import { FaceOvalGuide } from "./FaceOvalGuide";
 
 const INSTRUCTIONS = [
@@ -39,14 +41,36 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
 
   function capture() {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    setSamples((current) => [...current, captureFrame(video, 480)].slice(0, REQUIRED_SAMPLES));
+    if (!video) {
+      toast.error("Camera preview is not active. Please tap 'Open camera'.");
+      return;
+    }
+    if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) {
+      toast.info("Camera is initializing, please hold your face steady and tap again.");
+      return;
+    }
+    try {
+      const sample = captureFrame(video, 480);
+      setSamples((current) => [...current, sample].slice(0, REQUIRED_SAMPLES));
+      void triggerHaptic("light");
+    } catch (err) {
+      toast.error("Could not capture frame. Please ensure your camera is visible.");
+    }
   }
 
   function retake(index: number) {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    setSamples((current) => current.map((sample, i) => (i === index ? captureFrame(video, 480) : sample)));
+    if (!video || !video.videoWidth) {
+      toast.info("Camera is initializing, please try again in a moment.");
+      return;
+    }
+    try {
+      const sample = captureFrame(video, 480);
+      setSamples((current) => current.map((s, i) => (i === index ? sample : s)));
+      void triggerHaptic("light");
+    } catch {
+      toast.error("Could not retake sample.");
+    }
   }
 
   function removeSample(index: number) {
@@ -156,9 +180,15 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
       <div className="flex flex-wrap items-center gap-3">
         {status === "ready" ? (
           <>
-            <Button onClick={capture} disabled={count >= REQUIRED_SAMPLES}>
-              <Camera className="h-4 w-4" aria-hidden />
-              Capture
+            <Button
+              onClick={capture}
+              disabled={count >= REQUIRED_SAMPLES}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Camera className="h-4 w-4 mr-2" aria-hidden />
+              {count >= REQUIRED_SAMPLES
+                ? "All 5 samples captured"
+                : `Capture sample (${count + 1}/${REQUIRED_SAMPLES})`}
             </Button>
             <Button variant="outline" onClick={stop}>
               Close camera
