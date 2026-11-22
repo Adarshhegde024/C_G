@@ -194,7 +194,7 @@ function RegisterPage() {
       setCreated(true);
       setSubmitting(false);
       toast.success("Account created successfully.");
-      setTimeout(() => void navigate({ to: "/login", replace: true }), 2500);
+      setTimeout(() => void navigate({ to: "/login", search: { email: personal.email.trim() }, replace: true }), 1200);
     } catch (err) {
       setSubmitting(false);
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");

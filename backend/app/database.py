@@ -106,8 +106,13 @@ def _persist_state_to_disk():
     try:
         import json
         payload = {
+            "profiles": _profiles,
             "nominees": _nominees,
             "recipients": _recipients,
+            "documents": _documents,
+            "check_in_records": _check_in_records,
+            "legacy_cases": _legacy_cases,
+            "case_evidence": _case_evidence,
         }
         with open(_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f)
@@ -120,8 +125,15 @@ def _load_state_from_disk():
         if _STATE_FILE.exists():
             with open(_STATE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                _profiles.update(data.get("profiles", {}))
                 _nominees.update(data.get("nominees", {}))
                 _recipients.update(data.get("recipients", {}))
+                _documents.update(data.get("documents", {}))
+                _legacy_cases.update(data.get("legacy_cases", {}))
+                _case_evidence.update(data.get("case_evidence", {}))
+                stored_records = data.get("check_in_records", [])
+                if stored_records:
+                    _check_in_records.extend(stored_records)
     except Exception as e:
         logger.debug(f"Failed to load state from disk: {e}")
 
@@ -188,6 +200,7 @@ def create_profile(data: Dict[str, Any]) -> Dict[str, Any]:
     """Insert a new profile into the repository and sync with Supabase in background."""
     pid = str(data.get("id"))
     _profiles[pid] = dict(data)
+    _persist_state_to_disk()
 
     def _sync():
         try:
@@ -203,6 +216,7 @@ def create_profile(data: Dict[str, Any]) -> Dict[str, Any]:
                 _profiles[pid].update(res.data[0])
                 if pwd:
                     _profiles[pid]["password_hash"] = pwd
+                _persist_state_to_disk()
         except Exception as e:
             logger.debug(f"create_profile Supabase: {e}")
 
@@ -217,6 +231,7 @@ def update_profile(profile_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
         _profiles[pid].update(patch)
     else:
         _profiles[pid] = dict(patch)
+    _persist_state_to_disk()
 
     def _sync():
         try:
@@ -232,6 +247,7 @@ def update_profile(profile_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
                 _profiles[pid].update(res.data[0])
                 if pwd:
                     _profiles[pid]["password_hash"] = pwd
+                _persist_state_to_disk()
         except Exception as e:
             logger.debug(f"update_profile Supabase: {e}")
 

@@ -12,6 +12,7 @@ from app.database import (
     get_nominee_for_owner,
     get_documents_for_owner,
     get_recipients,
+    _db_executor,
 )
 from app.services.checkin_scheduler import evaluate_account_status, process_owner_deadline
 
@@ -21,9 +22,9 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 @router.get("", response_model=DashboardSummary)
 async def get_dashboard(current_user: AuthUser = Depends(get_current_user)):
     """Computes and returns the dashboard summary for the current user in milliseconds."""
-    # Process strict deadlines & trigger notifications if due
+    # Process strict deadlines & trigger notifications asynchronously in background
     if current_user.role == "owner":
-        process_owner_deadline(current_user.id)
+        _db_executor.submit(process_owner_deadline, current_user.id)
 
     profile = get_profile_by_id(current_user.id) or {}
 

@@ -195,6 +195,7 @@ function MobileBottomNav({ onOpenMore }: { onOpenMore: () => void }) {
         <Link
           key={item.to}
           to={item.to}
+          preload="viewport"
           className="group flex flex-1 flex-col items-center justify-center py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground data-[status=active]:text-primary"
         >
           <item.icon className="h-5 w-5 transition-transform group-hover:scale-105 data-[status=active]:text-primary" />

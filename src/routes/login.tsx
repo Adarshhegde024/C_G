@@ -64,9 +64,12 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Clear any stale local token so login requests always start fresh
-    setToken(null);
-  }, []);
+    // If redirected from registration, pre-fill email
+    const search = router.state.location.search as { email?: string };
+    if (search?.email) {
+      setEmail(search.email);
+    }
+  }, [router.state.location.search]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();

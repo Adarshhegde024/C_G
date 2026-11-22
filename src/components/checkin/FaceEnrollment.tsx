@@ -50,9 +50,19 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
       return;
     }
     try {
-      const sample = captureFrame(video, 480);
-      setSamples((current) => [...current, sample].slice(0, REQUIRED_SAMPLES));
+      const sample = captureFrame(video, 360);
+      const nextSamples = [...samples, sample].slice(0, REQUIRED_SAMPLES);
+      setSamples(nextSamples);
       void triggerHaptic("light");
+
+      if (nextSamples.length === REQUIRED_SAMPLES) {
+        void triggerHaptic("success");
+        toast.success("All 5 face samples captured!");
+        setTimeout(() => {
+          stop();
+          onComplete(nextSamples);
+        }, 500);
+      }
     } catch (err) {
       toast.error("Could not capture frame. Please ensure your camera is visible.");
     }
@@ -65,7 +75,7 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
       return;
     }
     try {
-      const sample = captureFrame(video, 480);
+      const sample = captureFrame(video, 360);
       setSamples((current) => current.map((s, i) => (i === index ? sample : s)));
       void triggerHaptic("light");
     } catch {
@@ -181,16 +191,22 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
         {status === "ready" ? (
           <>
             <Button
-              onClick={capture}
-              disabled={count >= REQUIRED_SAMPLES}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={count >= REQUIRED_SAMPLES ? finish : capture}
+              disabled={submitting}
+              className={
+                count >= REQUIRED_SAMPLES
+                  ? "bg-accent text-accent-foreground shadow-md hover:bg-accent/90"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }
             >
               <Camera className="h-4 w-4 mr-2" aria-hidden />
-              {count >= REQUIRED_SAMPLES
-                ? "All 5 samples captured"
-                : `Capture sample (${count + 1}/${REQUIRED_SAMPLES})`}
+              {submitting
+                ? "Storing enrollment…"
+                : count >= REQUIRED_SAMPLES
+                  ? "✓ Complete enrollment & continue"
+                  : `Capture sample (${count + 1}/${REQUIRED_SAMPLES})`}
             </Button>
-            <Button variant="outline" onClick={stop}>
+            <Button variant="outline" onClick={stop} disabled={submitting}>
               Close camera
             </Button>
           </>
@@ -201,7 +217,7 @@ export function FaceEnrollment({ onComplete, submitting }: FaceEnrollmentProps) 
           disabled={count < REQUIRED_SAMPLES || submitting}
           className="sm:ml-auto"
         >
-          {submitting ? "Creating account…" : "Continue"}
+          {submitting ? "Storing enrollment…" : "Continue"}
         </Button>
       </div>
     </div>

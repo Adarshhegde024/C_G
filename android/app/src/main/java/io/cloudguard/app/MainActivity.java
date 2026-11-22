@@ -51,6 +51,8 @@ public class MainActivity extends BridgeActivity {
                 try {
                     WebView webView = bridge.getWebView();
                     webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+                    webView.getSettings().setDomStorageEnabled(true);
+                    webView.getSettings().setDatabaseEnabled(true);
 
                     // Set custom WebChromeClient to reliably handle camera & microphone permission pop-ups
                     webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
