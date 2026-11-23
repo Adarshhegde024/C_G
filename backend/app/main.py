@@ -131,6 +131,26 @@ async def email_diagnostics(to: Optional[str] = None):
 
     if BREVO_API_KEY:
         try:
+            # Query Brevo senders
+            import urllib.request
+            import json
+            req_s = urllib.request.Request("https://api.brevo.com/v3/senders", headers={"api-key": BREVO_API_KEY, "Accept": "application/json"})
+            with urllib.request.urlopen(req_s, timeout=8) as r_s:
+                senders_data = json.loads(r_s.read().decode("utf-8"))
+                status_report["brevo_senders"] = senders_data.get("senders", [])
+        except Exception as e_s:
+            status_report["errors"]["brevo_senders"] = str(e_s)
+
+        try:
+            # Query Brevo recent delivery events
+            req_ev = urllib.request.Request(f"https://api.brevo.com/v3/smtp/statistics/events?limit=5&email={target}", headers={"api-key": BREVO_API_KEY, "Accept": "application/json"})
+            with urllib.request.urlopen(req_ev, timeout=8) as r_ev:
+                events_data = json.loads(r_ev.read().decode("utf-8"))
+                status_report["brevo_recent_events"] = events_data.get("events", [])
+        except Exception as e_ev:
+            status_report["errors"]["brevo_recent_events"] = str(e_ev)
+
+        try:
             ok = _send_via_brevo(target, "CloudGuard Brevo Test", "<p>Test email via Brevo API</p>", "Test email via Brevo API")
             status_report["results"]["brevo"] = "DELIVERED" if ok else "FAILED"
         except Exception as e:
