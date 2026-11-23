@@ -221,19 +221,17 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
     existing_profile = get_profile_by_email(target_email)
     if existing_profile:
         profile_id = str(existing_profile["id"])
-        # Preserve user's existing primary role (e.g. owner)
-        assigned_role = existing_profile.get("role", "owner" if target_role == "nominee" else target_role)
-        if payload.password and not existing_profile.get("password_hash"):
+        assigned_role = target_role if target_role else existing_profile.get("role", "nominee")
+        if payload.password:
             hashed_pwd = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-            update_profile(profile_id, {"password_hash": hashed_pwd, "updated_at": now_iso})
+            update_profile(profile_id, {"password_hash": hashed_pwd, "role": assigned_role, "updated_at": now_iso})
     else:
         profile_id = str(uuid.uuid4())
         hashed_pwd = None
         if payload.password:
             hashed_pwd = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-        # A nominee signing up receives full vault owner capabilities
-        assigned_role = "owner" if target_role == "nominee" else target_role
+        assigned_role = target_role or "nominee"
         new_profile = {
             "id": profile_id,
             "email": target_email,

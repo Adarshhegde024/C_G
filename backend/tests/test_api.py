@@ -539,5 +539,91 @@ def test_biometric_face_and_spoken_challenge():
     assert "speech detected" in (sil_json["reason"] or "").lower()
 
 
+def test_multi_nominee_and_nominee_medical_hold_flow():
+    """Verify owner can configure multiple nominees, nominee can log in as nominee and manage medical hold."""
+    owner_token = get_owner_token()
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+
+    # 1. Create first nominee
+    n1_email = f"nominee_one_{uuid.uuid4().hex[:6]}@example.com"
+    res1 = client.post("/api/nominee", headers=owner_headers, json={"name": "Nominee One", "email": n1_email})
+    assert res1.status_code == 200
+    n1 = res1.json()
+    assert n1["email"] == n1_email
+
+    # 2. Create second nominee
+    n2_email = f"nominee_two_{uuid.uuid4().hex[:6]}@example.com"
+    res2 = client.post("/api/nominee", headers=owner_headers, json={"name": "Nominee Two", "email": n2_email})
+    assert res2.status_code == 200
+    n2 = res2.json()
+    assert n2["email"] == n2_email
+
+    # 3. List all nominees for owner
+    list_res = client.get("/api/nominee/list", headers=owner_headers)
+    assert list_res.status_code == 200
+    n_list = list_res.json()
+    assert len(n_list) >= 2
+    emails = [n["email"] for n in n_list]
+    assert n1_email in emails
+    assert n2_email in emails
+
+    # 4. Nominee Two accepts invite and sets password
+    token2 = n2["invitation_link"].split("/invite/")[-1]
+    acc_res = client.post(f"/api/invite/{token2}/accept", json={"password": "Password123!"})
+    assert acc_res.status_code == 200
+    acc_data = acc_res.json()
+    assert acc_data["user"]["role"] == "nominee"
+
+    # 5. Nominee Two logs in with requested_role="nominee"
+    nom_login = client.post("/api/auth/login", json={
+        "email": n2_email,
+        "password": "Password123!",
+        "requested_role": "nominee"
+    })
+    assert nom_login.status_code == 200
+    nom_token = nom_login.json()["token"]
+    assert nom_login.json()["user"]["role"] == "nominee"
+    nom_headers = {"Authorization": f"Bearer {nom_token}"}
+
+    # 6. Nominee checks medical hold
+    med_status = client.get("/api/nominee/medical-hold", headers=nom_headers)
+    assert med_status.status_code == 200
+    assert med_status.json()["active"] is False
+
+    # 7. Nominee activates medical hold for owner's vault
+    freeze_res = client.post("/api/nominee/medical-hold", headers=nom_headers, json={
+        "active": True,
+        "duration_days": 14,
+        "note": "Hospital admission for major surgery."
+    })
+    assert freeze_res.status_code == 200
+    assert freeze_res.json()["active"] is True
+    assert freeze_res.json()["account_status"] == "MEDICAL_HOLD"
+
+    # 8. Verify owner dashboard reflects MEDICAL_HOLD
+    dash_owner = client.get("/api/dashboard", headers=owner_headers)
+    assert dash_owner.status_code == 200
+    assert dash_owner.json()["account_status"] == "MEDICAL_HOLD"
+
+    # 9. Nominee lifts medical hold
+    unfreeze_res = client.post("/api/nominee/medical-hold", headers=nom_headers, json={
+        "active": False
+    })
+    assert unfreeze_res.status_code == 200
+    assert unfreeze_res.json()["active"] is False
+    assert unfreeze_res.json()["account_status"] == "ACTIVE"
+
+    # 10. Owner deletes Nominee One specifically
+    del_res = client.delete(f"/api/nominee/{n1['id']}", headers=owner_headers)
+    assert del_res.status_code == 204
+
+    # Verify Nominee Two still exists
+    list_after = client.get("/api/nominee/list", headers=owner_headers).json()
+    emails_after = [n["email"] for n in list_after]
+    assert n1_email not in emails_after
+    assert n2_email in emails_after
+
+
+
 
 

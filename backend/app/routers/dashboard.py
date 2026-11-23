@@ -10,6 +10,7 @@ from app.models.schemas import AuthUser, DashboardSummary, DurationValue, Medica
 from app.database import (
     get_profile_by_id,
     get_nominee_for_owner,
+    get_nominees_for_owner,
     get_documents_for_owner,
     get_recipients,
     _db_executor,
@@ -35,14 +36,17 @@ async def get_dashboard(current_user: AuthUser = Depends(get_current_user)):
     docs_count = len(get_documents_for_owner(current_user.id))
     recips_count = len(get_recipients(current_user.id))
 
-    # Nominee status
-    nominee = get_nominee_for_owner(current_user.id)
+    # Nominee status (supports single or multiple nominees)
+    nominees = get_nominees_for_owner(current_user.id)
     nominee_status = None
-    if nominee:
-        status_label = nominee.get("status", "PENDING").capitalize()
-        nominee_status = f"{nominee.get('name')} ({status_label})"
-    else:
+    if not nominees:
         nominee_status = "Not configured yet."
+    elif len(nominees) == 1:
+        status_label = nominees[0].get("status", "PENDING").capitalize()
+        nominee_status = f"{nominees[0].get('name')} ({status_label})"
+    else:
+        active_count = sum(1 for n in nominees if n.get("status") == "ACCEPTED")
+        nominee_status = f"{len(nominees)} Nominees ({active_count} Active)"
 
     # Frequencies
     freq_data = profile.get("check_in_frequency") or {"value": 30, "unit": "days"}

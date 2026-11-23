@@ -205,7 +205,7 @@ function InvitePage() {
                   onClick={handleGoToDashboard}
                 >
                   <FolderLock className="h-4 w-4" />
-                  {isNominee ? "Open My Personal Vault" : "Enter Dashboard"}
+                  {isNominee ? "Enter Nominee Dashboard" : "Enter Dashboard"}
                 </Button>
 
                 {isNominee ? (
@@ -222,10 +222,17 @@ function InvitePage() {
                 <Button
                   variant="ghost"
                   className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => void navigate({ to: "/login" })}
+                  onClick={() =>
+                    void navigate({
+                      to: "/login",
+                      search: isNominee
+                        ? { role: "nominee", email: info.email }
+                        : { email: info.email },
+                    })
+                  }
                 >
                   <LogIn className="h-4 w-4" />
-                  Done · Return to Sign In
+                  {isNominee ? "Sign In as Nominee" : "Done · Return to Sign In"}
                 </Button>
               </div>
             </div>

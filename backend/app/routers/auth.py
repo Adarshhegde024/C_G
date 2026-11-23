@@ -66,11 +66,25 @@ async def login(payload: LoginPayload):
             )
 
     profile_id = str(profile["id"])
+    user_role = profile.get("role", "owner")
+
+    if payload.requested_role == "nominee":
+        from app.database import get_nominee_for_user
+        nom = get_nominee_for_user(profile_id, email)
+        if not nom and user_role != "nominee":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No nominee designation found for this account. If you created a vault, please sign in as Vault Owner.",
+            )
+        user_role = "nominee"
+    elif payload.requested_role == "owner":
+        user_role = "owner"
+
     auth_user = AuthUser(
         id=profile_id,
         name=profile.get("full_name") or "User",
         email=profile["email"],
-        role=profile.get("role", "owner"),
+        role=user_role,
         account_status=profile.get("account_status", "ACTIVE"),
         avatar_url=profile.get("avatar_url"),
     )

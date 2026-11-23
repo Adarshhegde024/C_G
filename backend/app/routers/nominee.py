@@ -5,7 +5,7 @@ Handles owner nominee configuration and the nominee legacy verification portal.
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request, status
@@ -18,15 +18,22 @@ from app.models.schemas import (
     NomineeCase,
     EvidenceItem,
     InitiateClaimPayload,
+    MedicalHold,
+    MedicalHoldTogglePayload,
+    MedicalHoldResponse,
+    DurationValue,
 )
 from app.database import (
     get_supabase,
     get_nominee_for_owner,
+    get_nominees_for_owner,
     get_nominee_for_user,
     get_profile_by_id,
     save_nominee as db_save_nominee,
     update_nominee as db_update_nominee,
     delete_nominee_for_owner as db_delete_nominee_for_owner,
+    delete_nominee_record as db_delete_nominee_record,
+    get_documents_for_owner,
     save_case_evidence,
     get_case_evidence_for_case,
     update_legacy_case,
@@ -34,6 +41,7 @@ from app.database import (
     save_legacy_case,
     get_legacy_case_for_nominee,
 )
+from app.services.checkin_scheduler import calculate_next_deadline
 from app.services.audit import record_audit
 from app.services.ocr import analyze_evidence_document
 from app.services.email import send_nominee_invitation_email
@@ -66,12 +74,54 @@ def _build_invite_link(token: str, request: Optional[Request] = None) -> str:
 
 # ---- Owner Nominee Configuration -------------------------------------------
 
-@router.get("", response_model=Optional[Nominee])
-async def get_nominee(
+@router.get("/list", response_model=List[Nominee])
+async def list_nominees(
     request: Request,
     current_user: AuthUser = Depends(get_current_user),
 ):
-    """Returns the nominee configured for the vault owner."""
+    """Returns all nominees configured for the vault owner."""
+    raw_list = get_nominees_for_owner(current_user.id)
+    result = []
+    for raw in raw_list:
+        token = raw.get("invitation_token")
+        if not token:
+            token = str(uuid.uuid4())
+            raw["invitation_token"] = token
+            raw["invitation_expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+            prevs = list(raw.get("previous_tokens") or [])
+            if token not in prevs:
+                prevs.append(token)
+            if str(raw.get("id")) not in prevs:
+                prevs.append(str(raw.get("id")))
+            raw["previous_tokens"] = prevs
+            db_update_nominee(str(raw["id"]), {
+                "invitation_token": token,
+                "invitation_expires_at": raw["invitation_expires_at"],
+                "previous_tokens": prevs,
+            })
+        inv_link = _build_invite_link(token, request)
+        result.append(
+            Nominee(
+                id=str(raw["id"]),
+                name=raw["name"],
+                email=raw["email"],
+                status=raw.get("status", "PENDING"),
+                invitation_link=inv_link,
+            )
+        )
+    return result
+
+
+@router.get("", response_model=Optional[Union[Nominee, List[Nominee]]])
+async def get_nominee(
+    request: Request,
+    all: bool = False,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """Returns the primary nominee (or all nominees if all=True) configured for the vault owner."""
+    if all:
+        return await list_nominees(request, current_user)
+
     raw = get_nominee_for_owner(current_user.id)
     if not raw:
         return None
@@ -109,7 +159,6 @@ async def save_nominee(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Creates a new nominee designation for the vault owner."""
-    supabase = get_supabase()
     email = payload.email.strip().lower()
     nom_id = str(uuid.uuid4())
     token = str(uuid.uuid4())
@@ -165,14 +214,16 @@ async def save_nominee(
     )
 
 
-@router.patch("", response_model=Nominee)
-async def update_nominee(
+@router.patch("/{nominee_id}", response_model=Nominee)
+async def update_specific_nominee(
+    nominee_id: str,
     payload: SaveNomineePayload,
     request: Request,
     current_user: AuthUser = Depends(get_current_user),
 ):
-    """Updates the existing nominee details."""
-    nom = get_nominee_for_owner(current_user.id)
+    """Updates a specific nominee details by nominee ID."""
+    nominees = get_nominees_for_owner(current_user.id)
+    nom = next((n for n in nominees if str(n.get("id")) == str(nominee_id)), None)
     if not nom:
         raise HTTPException(status_code=404, detail="Nominee not found.")
     new_email = payload.email.strip().lower()
@@ -210,23 +261,49 @@ async def update_nominee(
     )
 
 
-@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_nominee(current_user: AuthUser = Depends(get_current_user)):
-    """Removes the nominee designation."""
-    db_delete_nominee_for_owner(current_user.id)
-    record_audit(current_user.id, "NOMINEE_REMOVED", "Removed nominee designation", "SUCCESS")
-    return None
-
-
-@router.post("/invite", response_model=Nominee)
-async def invite_nominee(
+@router.patch("", response_model=Nominee)
+async def update_nominee(
+    payload: SaveNomineePayload,
     request: Request,
     current_user: AuthUser = Depends(get_current_user),
 ):
-    """Sends or resends the nominee verification invitation."""
+    """Updates the primary nominee details."""
     nom = get_nominee_for_owner(current_user.id)
     if not nom:
-        raise HTTPException(status_code=404, detail="No nominee configured.")
+        raise HTTPException(status_code=404, detail="Nominee not found.")
+    return await update_specific_nominee(str(nom["id"]), payload, request, current_user)
+
+
+@router.delete("/{nominee_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_specific_nominee(
+    nominee_id: str,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """Removes a specific nominee designation."""
+    db_delete_nominee_record(nominee_id, current_user.id)
+    record_audit(current_user.id, "NOMINEE_REMOVED", f"Removed nominee {nominee_id}", "SUCCESS")
+    return None
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_nominee(current_user: AuthUser = Depends(get_current_user)):
+    """Removes all nominee designations for the owner."""
+    db_delete_nominee_for_owner(current_user.id)
+    record_audit(current_user.id, "NOMINEE_REMOVED", "Removed nominee designations", "SUCCESS")
+    return None
+
+
+@router.post("/{nominee_id}/invite", response_model=Nominee)
+async def invite_specific_nominee(
+    nominee_id: str,
+    request: Request,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """Sends or resends the nominee verification invitation for a specific nominee."""
+    nominees = get_nominees_for_owner(current_user.id)
+    nom = next((n for n in nominees if str(n.get("id")) == str(nominee_id)), None)
+    if not nom:
+        raise HTTPException(status_code=404, detail="Nominee not found.")
     old_token = nom.get("invitation_token")
     token = str(uuid.uuid4())
     prevs = list(nom.get("previous_tokens") or [])
@@ -244,7 +321,6 @@ async def invite_nominee(
         "invitation_expires_at": expires,
     })
     
-    # Send / resend real invitation email in background
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
     frontend_base = _get_request_frontend_base(request)
@@ -278,6 +354,204 @@ async def invite_nominee(
         status="PENDING",
         invitation_link=inv_link,
     )
+
+
+@router.post("/invite", response_model=Nominee)
+async def invite_nominee(
+    request: Request,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """Sends or resends the nominee verification invitation for the primary nominee."""
+    nom = get_nominee_for_owner(current_user.id)
+    if not nom:
+        raise HTTPException(status_code=404, detail="No nominee configured.")
+    return await invite_specific_nominee(str(nom["id"]), request, current_user)
+
+
+# ---- Nominee Medical Hold Controls ------------------------------------------
+
+@router.get("/medical-hold", response_model=MedicalHoldResponse)
+async def get_nominee_medical_hold(current_user: AuthUser = Depends(get_current_user)):
+    """
+    Returns the medical hold / vault freeze status of the vault owner linked to the nominee.
+    """
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No linked vault found for this nominee.")
+
+    owner_id = nominee_rec["owner_id"]
+    owner_profile = get_profile_by_id(owner_id) or {}
+    med_hold = owner_profile.get("medical_hold") or {"active": False, "start_date": None, "end_date": None, "note": None}
+    owner_name = owner_profile.get("full_name") or "Vault Owner"
+
+    msg = f"Vault of {owner_name} is currently frozen under medical hold." if med_hold.get("active") else f"Vault of {owner_name} is operating normally."
+    return MedicalHoldResponse(
+        active=bool(med_hold.get("active")),
+        start_date=med_hold.get("start_date"),
+        end_date=med_hold.get("end_date"),
+        note=med_hold.get("note"),
+        account_status=owner_profile.get("account_status", "ACTIVE"),
+        message=msg,
+    )
+
+
+@router.post("/medical-hold", response_model=MedicalHoldResponse)
+async def toggle_nominee_medical_hold(
+    payload: MedicalHoldTogglePayload,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """
+    Allows a trusted nominee to activate or lift a Medical Hold on their vault owner's account
+    during emergency hospitalization, surgery, or incapacity.
+    """
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No linked vault found for this nominee.")
+
+    owner_id = nominee_rec["owner_id"]
+    owner_profile = get_profile_by_id(owner_id) or {}
+    owner_name = owner_profile.get("full_name") or "Vault Owner"
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    if payload.active:
+        end_date_str = payload.end_date
+        if payload.duration_days and payload.duration_days > 0:
+            end_date_str = (now + timedelta(days=payload.duration_days)).isoformat()
+
+        med_hold_data = {
+            "active": True,
+            "start_date": now_iso,
+            "end_date": end_date_str,
+            "note": payload.note.strip() if payload.note else None,
+        }
+        patch = {
+            "medical_hold": med_hold_data,
+            "account_status": "MEDICAL_HOLD",
+            "updated_at": now_iso,
+        }
+        update_profile(owner_id, patch)
+        record_audit(
+            owner_id,
+            "MEDICAL_HOLD_ACTIVATED_BY_NOMINEE",
+            f"Nominee {current_user.name} placed vault on medical hold: {payload.note or 'Emergency freeze'}",
+            "SUCCESS",
+        )
+        return MedicalHoldResponse(
+            active=True,
+            start_date=now_iso,
+            end_date=end_date_str,
+            note=med_hold_data["note"],
+            account_status="MEDICAL_HOLD",
+            message=f"{owner_name}'s vault is now frozen under medical hold. Deadlines and releases are paused.",
+        )
+    else:
+        freq_dict = owner_profile.get("check_in_frequency") or {"value": 30, "unit": "days"}
+        freq = DurationValue(**freq_dict)
+        new_deadline = calculate_next_deadline(now, freq)
+
+        med_hold_data = {
+            "active": False,
+            "start_date": None,
+            "end_date": now_iso,
+            "note": None,
+        }
+        patch = {
+            "medical_hold": med_hold_data,
+            "account_status": "ACTIVE",
+            "last_check_in_at": now_iso,
+            "next_check_in_deadline": new_deadline.isoformat(),
+            "missed_checkin_alerted_at": None,
+            "grace_expired_alerted_at": None,
+            "updated_at": now_iso,
+        }
+        update_profile(owner_id, patch)
+        record_audit(
+            owner_id,
+            "MEDICAL_HOLD_LIFTED_BY_NOMINEE",
+            f"Nominee {current_user.name} lifted medical hold. Vault check-in resumed.",
+            "SUCCESS",
+        )
+        return MedicalHoldResponse(
+            active=False,
+            start_date=None,
+            end_date=now_iso,
+            note=None,
+            account_status="ACTIVE",
+            message=f"Medical hold lifted for {owner_name}'s vault. Normal check-in schedule has resumed.",
+        )
+
+
+# ---- Nominee Released Documents & Verification ------------------------------
+
+@router.get("/documents")
+async def get_nominee_released_documents(current_user: AuthUser = Depends(get_current_user)):
+    """
+    Returns released vault documents accessible to the nominee once proof has been verified.
+    """
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No linked vault found.")
+
+    owner_id = nominee_rec["owner_id"]
+    case_data = get_legacy_case_for_nominee(nominee_rec["id"])
+    owner_docs = get_documents_for_owner(owner_id)
+
+    # Documents are accessible if case is APPROVED or released by owner
+    is_approved = bool(case_data and case_data.get("status") == "APPROVED")
+    released = []
+    for d in owner_docs:
+        if is_approved or d.get("release_status") == "RELEASED":
+            released.append({
+                "id": str(d["id"]),
+                "name": d["name"],
+                "file_type": d.get("file_type", "document"),
+                "category": d.get("category", "General"),
+                "size_bytes": d.get("size_bytes", 0),
+                "encryption_status": d.get("encryption_status", "DECRYPTED"),
+                "released_at": d.get("released_at") or datetime.now(timezone.utc).isoformat(),
+                "download_url": f"/api/documents/{d['id']}/download",
+            })
+    return released
+
+
+@router.post("/case/fast-track-approve", response_model=NomineeCase)
+async def fast_track_approve_case(current_user: AuthUser = Depends(get_current_user)):
+    """
+    Test helper / fast-track simulation: marks nominee case APPROVED and unlocks vault documents.
+    """
+    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
+    if not nominee_rec:
+        raise HTTPException(status_code=404, detail="No nominee case found.")
+
+    case_data = get_legacy_case_for_nominee(nominee_rec["id"])
+    if not case_data:
+        raise HTTPException(status_code=404, detail="Case not initialized.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    case_id = str(case_data["id"])
+    owner_id = str(nominee_rec["owner_id"])
+
+    # Update case status to APPROVED
+    update_legacy_case(case_id, {
+        "status": "APPROVED",
+        "updated_at": now_iso,
+        "reviewed_at": now_iso,
+    })
+
+    # Mark owner documents as RELEASED
+    from app.database import _documents, _persist_state_to_disk
+    for doc in _documents.values():
+        if str(doc.get("owner_id")) == owner_id:
+            doc["release_status"] = "RELEASED"
+            doc["released_at"] = now_iso
+    _persist_state_to_disk()
+
+    update_profile(owner_id, {"account_status": "RELEASE_READY", "updated_at": now_iso})
+    record_audit(owner_id, "DOCUMENTS_RELEASED_SIMULATION", "Case approved and documents released to nominee.", "SUCCESS")
+
+    return await get_nominee_case(current_user)
+
 
 
 # ---- Nominee Portal (Evidence Submission & Case Tracking) -------------------

@@ -16,8 +16,12 @@ function normalizeAuth(response: AuthResponse): { token: string; user: AuthUser 
   return { token, user };
 }
 
-export async function login(email: string, password: string): Promise<AuthUser> {
-  const response = await apiClient.post<AuthResponse>("/api/auth/login", { email, password });
+export async function login(email: string, password: string, requestedRole?: string): Promise<AuthUser> {
+  const payload: { email: string; password: string; requested_role?: string } = { email, password };
+  if (requestedRole) {
+    payload.requested_role = requestedRole;
+  }
+  const response = await apiClient.post<AuthResponse>("/api/auth/login", payload);
   const { token, user } = normalizeAuth(response);
   setToken(token);
   return user;

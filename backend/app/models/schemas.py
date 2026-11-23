@@ -61,6 +61,7 @@ class ReEnrollFacePayload(BaseModel):
 class LoginPayload(BaseModel):
     email: str
     password: str
+    requested_role: Optional[str] = None
 
 
 class GoogleAuthPayload(BaseModel):

@@ -5,7 +5,7 @@ import { authStore, initAuthSession, type AuthState } from "./authStore";
 import type { AuthUser } from "@/types";
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (email: string, password: string, requestedRole?: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -21,8 +21,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     ...state,
-    async login(email, password) {
-      const user = await loginRequest(email, password);
+    async login(email, password, requestedRole) {
+      const user = await loginRequest(email, password, requestedRole);
       authStore.setSession(user);
       return user;
     },

@@ -1,5 +1,11 @@
 import { apiClient } from "./client";
-import type { Nominee, NomineeCase } from "@/types";
+import type {
+  Nominee,
+  NomineeCase,
+  NomineeMedicalHold,
+  ToggleNomineeMedicalHoldPayload,
+  ReleasedDocItem,
+} from "@/types";
 
 // ---- Owner nominee management ----------------------------------------------
 
@@ -7,20 +13,53 @@ export function fetchNominee(): Promise<Nominee | null> {
   return apiClient.get<Nominee | null>("/api/nominee");
 }
 
+export function fetchNominees(): Promise<Nominee[]> {
+  return apiClient.get<Nominee[]>("/api/nominee/list");
+}
+
 export function saveNominee(name: string, email: string): Promise<Nominee> {
   return apiClient.post<Nominee>("/api/nominee", { name, email });
 }
 
-export function updateNominee(name: string, email: string): Promise<Nominee> {
+export function updateNominee(name: string, email: string, nomineeId?: string): Promise<Nominee> {
+  if (nomineeId) {
+    return apiClient.patch<Nominee>(`/api/nominee/${nomineeId}`, { name, email });
+  }
   return apiClient.patch<Nominee>("/api/nominee", { name, email });
 }
 
-export function removeNominee(): Promise<void> {
+export function removeNominee(nomineeId?: string): Promise<void> {
+  if (nomineeId) {
+    return apiClient.delete<void>(`/api/nominee/${nomineeId}`);
+  }
   return apiClient.delete<void>("/api/nominee");
 }
 
-export function sendNomineeInvitation(): Promise<Nominee> {
+export function sendNomineeInvitation(nomineeId?: string): Promise<Nominee> {
+  if (nomineeId) {
+    return apiClient.post<Nominee>(`/api/nominee/${nomineeId}/invite`);
+  }
   return apiClient.post<Nominee>("/api/nominee/invite");
+}
+
+// ---- Nominee medical hold ---------------------------------------------------
+
+export function fetchNomineeMedicalHold(): Promise<NomineeMedicalHold> {
+  return apiClient.get<NomineeMedicalHold>("/api/nominee/medical-hold");
+}
+
+export function toggleNomineeMedicalHold(payload: ToggleNomineeMedicalHoldPayload): Promise<NomineeMedicalHold> {
+  return apiClient.post<NomineeMedicalHold>("/api/nominee/medical-hold", payload);
+}
+
+// ---- Nominee released documents & fast-track verification -------------------
+
+export function fetchNomineeReleasedDocuments(): Promise<ReleasedDocItem[]> {
+  return apiClient.get<ReleasedDocItem[]>("/api/nominee/documents");
+}
+
+export function fastTrackApproveNomineeCase(): Promise<NomineeCase> {
+  return apiClient.post<NomineeCase>("/api/nominee/case/fast-track-approve");
 }
 
 // ---- Nominee portal ---------------------------------------------------------

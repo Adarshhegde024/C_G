@@ -658,6 +658,53 @@ def delete_nominee_for_owner(owner_id: str) -> bool:
     return True
 
 
+def delete_nominee_record(nominee_id: str, owner_id: Optional[str] = None) -> bool:
+    """Removes a single nominee by ID from in-memory cache and Supabase."""
+    nid = str(nominee_id)
+    if nid in _nominees:
+        nom = _nominees[nid]
+        if owner_id and str(nom.get("owner_id")) != str(owner_id):
+            return False
+        _nominees.pop(nid, None)
+        _persist_state_to_disk()
+
+    def _sync():
+        try:
+            supabase_client.table("nominees").delete().eq("id", nid).execute()
+        except Exception as e:
+            logger.debug(f"delete_nominee_record Supabase: {e}")
+
+    _db_executor.submit(_sync)
+    return True
+
+
+def get_nominees_for_owner(owner_id: str) -> List[Dict[str, Any]]:
+    """Get all configured nominees for owner (instant from memory cache)."""
+    oid = str(owner_id)
+    items = [n for n in _nominees.values() if str(n.get("owner_id")) == oid]
+    if items:
+        return items
+
+    # Fast cache check: if checked within last 60 seconds and missing, return empty list
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if now_ts - _nominee_miss_cache.get(oid, 0) < 60.0:
+        return []
+
+    try:
+        res = supabase_client.table("nominees").select("*").eq("owner_id", oid).execute()
+        if res.data and len(res.data) > 0:
+            for nom in res.data:
+                _nominees[str(nom["id"])] = nom
+            return [n for n in _nominees.values() if str(n.get("owner_id")) == oid]
+        else:
+            _nominee_miss_cache[oid] = now_ts
+    except Exception as e:
+        logger.debug(f"get_nominees_for_owner Supabase: {e}")
+        _nominee_miss_cache[oid] = now_ts
+
+    return []
+
+
 def get_nominee_for_owner(owner_id: str) -> Optional[Dict[str, Any]]:
     """Get configured nominee for owner (instant from memory cache)."""
     oid = str(owner_id)

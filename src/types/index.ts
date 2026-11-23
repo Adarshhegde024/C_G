@@ -77,6 +77,22 @@ export interface Nominee {
   invitation_link?: string | null;
 }
 
+export interface NomineeMedicalHold {
+  active: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  note?: string | null;
+  account_status?: string;
+  message?: string;
+}
+
+export interface ToggleNomineeMedicalHoldPayload {
+  active: boolean;
+  duration_days?: number;
+  end_date?: string;
+  note?: string;
+}
+
 export interface CheckInRecord {
   id: string;
   date: string;
