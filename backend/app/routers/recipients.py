@@ -20,7 +20,7 @@ from app.database import (
     get_recipient_by_token,
 )
 from app.services.audit import record_audit
-from app.services.email import send_recipient_invitation_email
+from app.services.email import send_recipient_invitation_email, dispatch_email_async
 from app.config import FRONTEND_URL
 
 router = APIRouter(prefix="/api/recipients", tags=["Recipients"])
@@ -110,26 +110,14 @@ async def add_recipient(
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
     frontend_base = _get_request_frontend_base(request)
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(
-            None,
-            send_recipient_invitation_email,
-            payload.name.strip(),
-            email,
-            owner_name,
-            token,
-            frontend_base,
-        )
-    except Exception:
-        send_recipient_invitation_email(
-            recipient_name=payload.name.strip(),
-            recipient_email=email,
-            owner_name=owner_name,
-            token=token,
-            frontend_base_url=frontend_base,
-        )
+    dispatch_email_async(
+        send_recipient_invitation_email,
+        payload.name.strip(),
+        email,
+        owner_name,
+        token,
+        frontend_base,
+    )
 
     inv_link = _build_invite_link(token, request)
     return Recipient(
@@ -220,26 +208,14 @@ async def invite_recipient(
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
     frontend_base = _get_request_frontend_base(request)
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(
-            None,
-            send_recipient_invitation_email,
-            r["name"],
-            r["email"],
-            owner_name,
-            token,
-            frontend_base,
-        )
-    except Exception:
-        send_recipient_invitation_email(
-            recipient_name=r["name"],
-            recipient_email=r["email"],
-            owner_name=owner_name,
-            token=token,
-            frontend_base_url=frontend_base,
-        )
+    dispatch_email_async(
+        send_recipient_invitation_email,
+        r["name"],
+        r["email"],
+        owner_name,
+        token,
+        frontend_base,
+    )
 
     record_audit(current_user.id, "RECIPIENT_INVITED", f"Dispatched invitation to recipient {r.get('email')}", "SUCCESS")
 

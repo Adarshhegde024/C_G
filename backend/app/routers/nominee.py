@@ -44,7 +44,7 @@ from app.database import (
 from app.services.checkin_scheduler import calculate_next_deadline
 from app.services.audit import record_audit
 from app.services.ocr import analyze_evidence_document
-from app.services.email import send_nominee_invitation_email
+from app.services.email import send_nominee_invitation_email, dispatch_email_async
 from app.config import FRONTEND_URL
 
 logger = logging.getLogger("cloudguard.nominee")
@@ -179,30 +179,18 @@ async def save_nominee(
     saved = db_save_nominee(entry)
     record_audit(current_user.id, "NOMINEE_CONFIGURED", f"Designated nominee: {payload.name} ({email})", "SUCCESS")
 
-    # Send real invitation email in background thread so request completes immediately
+    # Send real invitation email in fast non-blocking background thread so request completes in milliseconds
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
     frontend_base = _get_request_frontend_base(request)
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(
-            None,
-            send_nominee_invitation_email,
-            payload.name.strip(),
-            email,
-            owner_name,
-            token,
-            frontend_base,
-        )
-    except Exception:
-        send_nominee_invitation_email(
-            nominee_name=payload.name.strip(),
-            nominee_email=email,
-            owner_name=owner_name,
-            token=token,
-            frontend_base_url=frontend_base,
-        )
+    dispatch_email_async(
+        send_nominee_invitation_email,
+        payload.name.strip(),
+        email,
+        owner_name,
+        token,
+        frontend_base,
+    )
 
     inv_link = _build_invite_link(token, request)
     return Nominee(
@@ -324,26 +312,14 @@ async def invite_specific_nominee(
     owner_profile = get_profile_by_id(current_user.id) or {}
     owner_name = owner_profile.get("full_name") or current_user.name
     frontend_base = _get_request_frontend_base(request)
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(
-            None,
-            send_nominee_invitation_email,
-            n["name"],
-            n["email"],
-            owner_name,
-            token,
-            frontend_base,
-        )
-    except Exception:
-        send_nominee_invitation_email(
-            nominee_name=n["name"],
-            nominee_email=n["email"],
-            owner_name=owner_name,
-            token=token,
-            frontend_base_url=frontend_base,
-        )
+    dispatch_email_async(
+        send_nominee_invitation_email,
+        n["name"],
+        n["email"],
+        owner_name,
+        token,
+        frontend_base,
+    )
     
     record_audit(current_user.id, "NOMINEE_INVITATION_SENT", f"Sent invitation to {n.get('email')}", "SUCCESS")
     inv_link = _build_invite_link(token, request)

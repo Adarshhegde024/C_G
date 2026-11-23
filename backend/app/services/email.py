@@ -31,8 +31,49 @@ from app.database import save_notification, get_profile_by_email
 logger = logging.getLogger("cloudguard.email")
 
 
+from concurrent.futures import ThreadPoolExecutor
+
+_email_executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="email_dispatcher")
+
+
+def dispatch_email_async(fn, *args, **kwargs):
+    """Schedules email function in a fast background worker so HTTP endpoints return in 0ms."""
+    try:
+        _email_executor.submit(fn, *args, **kwargs)
+    except Exception as e:
+        logger.warning(f"Failed to submit email to executor: {e}. Executing inline.")
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            pass
+
+
+def _send_via_vercel_relay(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Delivers email via Vercel HTTPS-to-SMTP Gateway (Port 443 -> Gmail SMTP on AWS Lambda)."""
+    relay_url = f"{FRONTEND_URL}/api/send_email"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "to": to_email,
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+    req = urllib.request.Request(relay_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=6) as response:
+            if response.status in (200, 201, 202):
+                logger.info(f"Delivered email to {to_email} via Vercel HTTPS SMTP Relay")
+                return True
+    except Exception as e:
+        logger.debug(f"Vercel HTTPS SMTP Relay skipped/failed: {e}")
+    return False
+
+
 def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-    """Delivers email via configured SMTP server with auto-fallback between TLS (587) and SSL (465)."""
+    """Delivers email via configured SMTP server with fast 3-second timeout."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
@@ -43,26 +84,18 @@ def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) 
 
     if SMTP_USE_SSL:
         try:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT or 465, timeout=15) as server:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT or 465, timeout=3) as server:
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
             logger.info(f"Delivered email to {to_email} via SMTP SSL ({SMTP_HOST}:{SMTP_PORT or 465})")
             return True
         except Exception as e_ssl:
-            logger.warning(f"SMTP SSL failed: {e_ssl}. Attempting TLS port 587...")
-            with smtplib.SMTP(SMTP_HOST, 587, timeout=15) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                if SMTP_USER and SMTP_PASSWORD:
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
-            logger.info(f"Delivered email to {to_email} via SMTP TLS fallback ({SMTP_HOST}:587)")
-            return True
+            logger.debug(f"SMTP SSL failed: {e_ssl}")
+            return False
     else:
         try:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT or 587, timeout=15) as server:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT or 587, timeout=3) as server:
                 server.ehlo()
                 if SMTP_USE_TLS:
                     server.starttls()
@@ -73,13 +106,8 @@ def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) 
             logger.info(f"Delivered email to {to_email} via SMTP TLS ({SMTP_HOST}:{SMTP_PORT or 587})")
             return True
         except Exception as e_tls:
-            logger.warning(f"SMTP TLS (port {SMTP_PORT or 587}) failed: {e_tls}. Attempting SSL on port 465 fallback...")
-            with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
-                if SMTP_USER and SMTP_PASSWORD:
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
-            logger.info(f"Delivered email to {to_email} via SMTP SSL fallback ({SMTP_HOST}:465)")
-            return True
+            logger.debug(f"SMTP TLS (port {SMTP_PORT or 587}) failed: {e_tls}")
+            return False
 
 
 def _send_via_brevo(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
@@ -154,31 +182,38 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[
     dispatch_recipient = SMTP_FROM_EMAIL or "adarshhegde024@gmail.com" if is_demo_address else clean_to
     dispatch_subject = f"[Simulation for {clean_to}] {subject}" if is_demo_address else subject
 
-    # 1. Try Brevo HTTP API over Port 443 (never blocked by cloud container hosting)
-    if BREVO_API_KEY:
-        try:
-            if _send_via_brevo(dispatch_recipient, dispatch_subject, html_body, plain):
-                return {"success": True, "method": "brevo", "recipient": dispatch_recipient, "original_recipient": clean_to}
-        except Exception as e:
-            logger.warning(f"Brevo API dispatch failed to {dispatch_recipient}: {e}")
+    # 1. Try Vercel HTTPS SMTP Gateway (Works on Render Port 443 with zero restrictions)
+    try:
+        if _send_via_vercel_relay(dispatch_recipient, dispatch_subject, html_body, plain):
+            return {"success": True, "method": "vercel_https_relay", "recipient": dispatch_recipient, "original_recipient": clean_to}
+    except Exception as e:
+        logger.debug(f"Vercel relay error: {e}")
 
-    # 2. Try Resend HTTP API over Port 443
-    if RESEND_API_KEY:
-        try:
-            if _send_via_resend(dispatch_recipient, dispatch_subject, html_body, plain):
-                return {"success": True, "method": "resend", "recipient": dispatch_recipient, "original_recipient": clean_to}
-        except Exception as e:
-            logger.warning(f"Resend dispatch failed to {dispatch_recipient}: {e}")
-
-    # 3. Try SMTP (Gmail SMTP with TLS/SSL auto-fallback)
+    # 2. Try direct SMTP (Local development where port 587/465 is open)
     if SMTP_HOST:
         try:
             if _send_via_smtp(dispatch_recipient, dispatch_subject, html_body, plain):
                 return {"success": True, "method": "smtp", "recipient": dispatch_recipient, "original_recipient": clean_to}
         except Exception as e:
-            logger.warning(f"SMTP dispatch failed to {dispatch_recipient}: {e}")
+            logger.debug(f"SMTP error: {e}")
 
-    # 4. Safe Console Fallback & In-App Notification
+    # 3. Try Brevo HTTP API over Port 443
+    if BREVO_API_KEY:
+        try:
+            if _send_via_brevo(dispatch_recipient, dispatch_subject, html_body, plain):
+                return {"success": True, "method": "brevo", "recipient": dispatch_recipient, "original_recipient": clean_to}
+        except Exception as e:
+            logger.debug(f"Brevo API error: {e}")
+
+    # 4. Try Resend HTTP API over Port 443
+    if RESEND_API_KEY:
+        try:
+            if _send_via_resend(dispatch_recipient, dispatch_subject, html_body, plain):
+                return {"success": True, "method": "resend", "recipient": dispatch_recipient, "original_recipient": clean_to}
+        except Exception as e:
+            logger.debug(f"Resend error: {e}")
+
+    # 5. Safe Console Fallback & In-App Notification
     print("\n" + "=" * 70)
     print(f" [EMAIL DISPATCH - CLOUDGUARD NOTIFICATION]")
     print(f" To:       {clean_to}")

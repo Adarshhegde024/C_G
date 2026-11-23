@@ -113,11 +113,12 @@ async def email_diagnostics(to: Optional[str] = None):
         SMTP_FROM_EMAIL,
         SMTP_FROM_NAME,
     )
-    from app.services.email import _send_via_brevo, _send_via_smtp, _send_via_resend
+    from app.services.email import _send_via_brevo, _send_via_smtp, _send_via_resend, _send_via_vercel_relay
 
     target = to or SMTP_FROM_EMAIL or "test@example.com"
     status_report = {
         "configured_providers": {
+            "vercel_relay": True,
             "brevo": bool(BREVO_API_KEY),
             "resend": bool(RESEND_API_KEY),
             "smtp": bool(SMTP_HOST),
@@ -129,7 +130,23 @@ async def email_diagnostics(to: Optional[str] = None):
         "errors": {},
     }
 
+    try:
+        ok_relay = _send_via_vercel_relay(target, "CloudGuard Vercel Relay Diagnostics", "<p>Test email via Vercel HTTPS SMTP Gateway</p>", "Test email via Vercel HTTPS SMTP Gateway")
+        status_report["results"]["vercel_relay"] = "DELIVERED" if ok_relay else "FAILED"
+    except Exception as e_relay:
+        status_report["errors"]["vercel_relay"] = str(e_relay)
+
     if BREVO_API_KEY:
+        try:
+            # Query Brevo account status and plan credits
+            import urllib.request
+            import json
+            req_acc = urllib.request.Request("https://api.brevo.com/v3/account", headers={"api-key": BREVO_API_KEY, "Accept": "application/json"})
+            with urllib.request.urlopen(req_acc, timeout=8) as r_acc:
+                status_report["brevo_account"] = json.loads(r_acc.read().decode("utf-8"))
+        except Exception as e_acc:
+            status_report["errors"]["brevo_account"] = str(e_acc)
+
         try:
             # Query Brevo senders
             import urllib.request
