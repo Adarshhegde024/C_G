@@ -32,7 +32,7 @@ logger = logging.getLogger("cloudguard.email")
 
 
 def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-    """Delivers email via configured SMTP server."""
+    """Delivers email via configured SMTP server with auto-fallback between TLS (587) and SSL (465)."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
@@ -42,22 +42,44 @@ def _send_via_smtp(to_email: str, subject: str, html_body: str, text_body: str) 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     if SMTP_USE_SSL:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=4) as server:
-            if SMTP_USER and SMTP_PASSWORD:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
-    else:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=4) as server:
-            server.ehlo()
-            if SMTP_USE_TLS:
+        try:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT or 465, timeout=15) as server:
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
+            logger.info(f"Delivered email to {to_email} via SMTP SSL ({SMTP_HOST}:{SMTP_PORT or 465})")
+            return True
+        except Exception as e_ssl:
+            logger.warning(f"SMTP SSL failed: {e_ssl}. Attempting TLS port 587...")
+            with smtplib.SMTP(SMTP_HOST, 587, timeout=15) as server:
+                server.ehlo()
                 server.starttls()
                 server.ehlo()
-            if SMTP_USER and SMTP_PASSWORD:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
-
-    logger.info(f"Delivered email to {to_email} via SMTP ({SMTP_HOST}:{SMTP_PORT})")
-    return True
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
+            logger.info(f"Delivered email to {to_email} via SMTP TLS fallback ({SMTP_HOST}:587)")
+            return True
+    else:
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT or 587, timeout=15) as server:
+                server.ehlo()
+                if SMTP_USE_TLS:
+                    server.starttls()
+                    server.ehlo()
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
+            logger.info(f"Delivered email to {to_email} via SMTP TLS ({SMTP_HOST}:{SMTP_PORT or 587})")
+            return True
+        except Exception as e_tls:
+            logger.warning(f"SMTP TLS (port {SMTP_PORT or 587}) failed: {e_tls}. Attempting SSL on port 465 fallback...")
+            with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
+            logger.info(f"Delivered email to {to_email} via SMTP SSL fallback ({SMTP_HOST}:465)")
+            return True
 
 
 def _send_via_brevo(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
@@ -123,38 +145,40 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[
     clean_to = to_email.strip().lower()
     plain = text_body or subject
 
-    # Prevent real dispatch to internal demo/placeholder domains (avoids mail bounces)
+    # Determine dispatch destination
     DEMO_DOMAINS = ("@cloudguard.io", "@example.com", "@test.com", "@localhost", "@sample.com")
     is_demo_address = any(clean_to.endswith(d) for d in DEMO_DOMAINS)
 
-    if not is_demo_address:
-        # 1. Try Brevo HTTP API over Port 443 (never blocked by Render Free Tier)
-        if BREVO_API_KEY:
-            try:
-                if _send_via_brevo(clean_to, subject, html_body, plain):
-                    return {"success": True, "method": "brevo", "recipient": clean_to}
-            except Exception as e:
-                logger.warning(f"Brevo API dispatch failed to {clean_to}: {e}")
+    # If an internal/demo address is used for testing, deliver a live simulation to the verified admin mailbox
+    # so test invitations can be opened and verified without email bounces.
+    dispatch_recipient = SMTP_FROM_EMAIL or "adarshhegde024@gmail.com" if is_demo_address else clean_to
+    dispatch_subject = f"[Simulation for {clean_to}] {subject}" if is_demo_address else subject
 
-        # 2. Try Resend HTTP API over Port 443 (never blocked by Render Free Tier)
-        if RESEND_API_KEY:
-            try:
-                if _send_via_resend(clean_to, subject, html_body, plain):
-                    return {"success": True, "method": "resend", "recipient": clean_to}
-            except Exception as e:
-                logger.warning(f"Resend dispatch failed to {clean_to}: {e}")
+    # 1. Try Brevo HTTP API over Port 443 (never blocked by cloud container hosting)
+    if BREVO_API_KEY:
+        try:
+            if _send_via_brevo(dispatch_recipient, dispatch_subject, html_body, plain):
+                return {"success": True, "method": "brevo", "recipient": dispatch_recipient, "original_recipient": clean_to}
+        except Exception as e:
+            logger.warning(f"Brevo API dispatch failed to {dispatch_recipient}: {e}")
 
-        # 3. Try SMTP (works locally and on hosting without blocked mail ports)
-        if SMTP_HOST:
-            try:
-                if _send_via_smtp(clean_to, subject, html_body, plain):
-                    return {"success": True, "method": "smtp", "recipient": clean_to}
-            except Exception as e:
-                logger.warning(f"SMTP dispatch failed to {clean_to} (Port blocked or timeout): {e}")
-    else:
-        logger.info(f"Demo address detected ({clean_to}) - skipping external dispatch to avoid mailbox bounce.")
+    # 2. Try Resend HTTP API over Port 443
+    if RESEND_API_KEY:
+        try:
+            if _send_via_resend(dispatch_recipient, dispatch_subject, html_body, plain):
+                return {"success": True, "method": "resend", "recipient": dispatch_recipient, "original_recipient": clean_to}
+        except Exception as e:
+            logger.warning(f"Resend dispatch failed to {dispatch_recipient}: {e}")
 
-    # 3. Development / Safe Console Fallback & In-App Notification
+    # 3. Try SMTP (Gmail SMTP with TLS/SSL auto-fallback)
+    if SMTP_HOST:
+        try:
+            if _send_via_smtp(dispatch_recipient, dispatch_subject, html_body, plain):
+                return {"success": True, "method": "smtp", "recipient": dispatch_recipient, "original_recipient": clean_to}
+        except Exception as e:
+            logger.warning(f"SMTP dispatch failed to {dispatch_recipient}: {e}")
+
+    # 4. Safe Console Fallback & In-App Notification
     print("\n" + "=" * 70)
     print(f" [EMAIL DISPATCH - CLOUDGUARD NOTIFICATION]")
     print(f" To:       {clean_to}")

@@ -143,4 +143,11 @@ async def email_diagnostics(to: Optional[str] = None):
         except Exception as e:
             status_report["errors"]["resend"] = str(e)
 
+    if SMTP_HOST:
+        try:
+            ok = _send_via_smtp(target, "CloudGuard SMTP Test", "<p>Test email via SMTP</p>", "Test email via SMTP")
+            status_report["results"]["smtp"] = "DELIVERED" if ok else "FAILED"
+        except Exception as e:
+            status_report["errors"]["smtp"] = str(e)
+
     return status_report

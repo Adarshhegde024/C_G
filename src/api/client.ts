@@ -8,11 +8,18 @@ function resolveBaseUrl(): string {
   const envUrl = (import.meta.env["VITE_API_URL"] ?? "").toString().trim().replace(/\/+$/, "");
   if (envUrl) return envUrl;
 
-  // On Android/iOS native WebViews (capacitor://localhost, ionic://, etc.), route to cloud backend
+  // On web and native runtimes, route non-local traffic directly to the cloud backend on Render
   if (typeof window !== "undefined") {
     const origin = window.location.origin || "";
-    const isNativeScheme = origin.startsWith("capacitor:") || origin.startsWith("ionic:") || origin.startsWith("file:");
-    if (isNativeScheme) {
+    const hostname = window.location.hostname || "";
+    const isLocal =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".local") ||
+      origin.includes("localhost:") ||
+      origin.includes("127.0.0.1:");
+
+    if (!isLocal) {
       return "https://c-g.onrender.com";
     }
   }
