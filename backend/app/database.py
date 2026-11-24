@@ -520,11 +520,18 @@ def get_released_documents_for_recipient(recipient_profile_id: str, search: Opti
         rid for rid, r in _recipients.items()
         if str(r.get("linked_user_id")) == pid or (user_email and r.get("email", "").lower() == user_email)
     ]
+    owner_ids = [
+        str(r.get("owner_id")) for rid, r in _recipients.items()
+        if (str(r.get("linked_user_id")) == pid or (user_email and r.get("email", "").lower() == user_email)) and r.get("owner_id")
+    ]
     results = []
     for d in _documents.values():
-        if d.get("release_status") == "RELEASED" and d.get("assigned_recipient_id") in assigned_rec_ids:
-            if not search or search.lower() in d.get("name", "").lower():
-                results.append(d)
+        if d.get("release_status") == "RELEASED":
+            is_direct_assigned = d.get("assigned_recipient_id") in assigned_rec_ids
+            is_owner_vault_doc = str(d.get("owner_id")) in owner_ids
+            if is_direct_assigned or is_owner_vault_doc:
+                if not search or search.lower() in d.get("name", "").lower():
+                    results.append(d)
     return results
 
 

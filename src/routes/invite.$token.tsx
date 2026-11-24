@@ -227,12 +227,12 @@ function InvitePage() {
                       to: "/login",
                       search: isNominee
                         ? { role: "nominee", email: info.email }
-                        : { email: info.email },
+                        : { role: "recipient", email: info.email },
                     })
                   }
                 >
                   <LogIn className="h-4 w-4" />
-                  {isNominee ? "Sign In as Nominee" : "Done · Return to Sign In"}
+                  {isNominee ? "Sign In as Nominee" : "Sign In as Recipient"}
                 </Button>
               </div>
             </div>
@@ -260,11 +260,13 @@ function InvitePage() {
                 ) : null}
               </div>
 
-              {/* Explanation of Nominee Role */}
+              {/* Explanation of Role */}
               <div className="rounded-lg bg-secondary/40 p-3.5 text-xs text-secondary-foreground border border-border">
                 <p className="font-semibold text-foreground mb-1">About this role:</p>
                 <p className="text-muted-foreground leading-relaxed">
-                  As a nominee, you are an emergency contact for {ownerName}'s encrypted digital vault. You will not have access to any private documents while {ownerName} is active.
+                  {isNominee
+                    ? `As a nominee, you are a trusted custodian for ${ownerName}'s encrypted digital vault. You can manage emergency medical holds and verify life events if check-ins lapse.`
+                    : `As a designated recipient, ${ownerName} has chosen you to receive and inherit protected documents from their vault upon verified life-event confirmation.`}
                 </p>
               </div>
 
@@ -295,7 +297,13 @@ function InvitePage() {
                   </div>
 
                   <Button type="submit" variant="accent" className="w-full" disabled={submitting}>
-                    {submitting ? "Confirming nomination…" : "Confirm Nomination"}
+                    {submitting
+                      ? isNominee
+                        ? "Confirming nomination…"
+                        : "Accepting invitation…"
+                      : isNominee
+                      ? "Confirm Nomination"
+                      : "Accept Invitation & Create Password"}
                   </Button>
                 </form>
               ) : (

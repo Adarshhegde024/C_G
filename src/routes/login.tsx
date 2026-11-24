@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Eye, EyeOff, ShieldCheck, HeartHandshake } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, HeartHandshake, FolderLock } from "lucide-react";
 
 import { useAuth } from "@/auth/AuthProvider";
 import { homeForRole } from "@/auth/roles";
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-type LoginRole = "owner" | "nominee";
+type LoginRole = "owner" | "nominee" | "recipient";
 
 function LoginPage() {
   const { login } = useAuth();
@@ -50,6 +50,8 @@ function LoginPage() {
     }
     if (search?.role === "nominee") {
       setSelectedRole("nominee");
+    } else if (search?.role === "recipient") {
+      setSelectedRole("recipient");
     }
   }, [router.state.location.search]);
 
@@ -60,10 +62,21 @@ function LoginPage() {
     try {
       const user = await login(email.trim(), password, selectedRole);
       const search = router.state.location.search as { redirect?: string };
-      const defaultTarget = selectedRole === "nominee" ? "/nominee/dashboard" : homeForRole(user.role);
+      const defaultTarget =
+        selectedRole === "nominee"
+          ? "/nominee/dashboard"
+          : selectedRole === "recipient"
+          ? "/recipient/dashboard"
+          : homeForRole(user.role);
       const target =
         search.redirect && search.redirect.startsWith("/") ? search.redirect : defaultTarget;
-      toast.success(selectedRole === "nominee" ? "Signed in as Nominee." : "Welcome back.");
+      toast.success(
+        selectedRole === "nominee"
+          ? "Signed in as Nominee."
+          : selectedRole === "recipient"
+          ? "Signed in as Recipient."
+          : "Welcome back."
+      );
       await navigate({ to: target, replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Email or password is incorrect.");
@@ -76,26 +89,28 @@ function LoginPage() {
       title="Welcome back"
       subtitle={
         selectedRole === "nominee"
-          ? "Sign in to manage trusted legacy cases, medical holds, and document access."
+          ? "Sign in to manage trusted legacy cases, medical holds, and verification."
+          : selectedRole === "recipient"
+          ? "Sign in to view and download released documents from your vault owner."
           : "Sign in to manage your vault, check-ins, and emergency nominees."
       }
     >
       {/* Role Selection Tabs */}
       <div className="mb-6 rounded-lg border border-border bg-secondary/50 p-1">
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-3 gap-1">
           <button
             type="button"
             onClick={() => {
               setSelectedRole("owner");
               setError(null);
             }}
-            className={`flex items-center justify-center gap-2 rounded-md py-2 px-3 text-xs font-semibold transition-all ${
+            className={`flex items-center justify-center gap-1.5 rounded-md py-2 px-2 text-xs font-semibold transition-all ${
               selectedRole === "owner"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
             Vault Owner
           </button>
           <button
@@ -104,14 +119,29 @@ function LoginPage() {
               setSelectedRole("nominee");
               setError(null);
             }}
-            className={`flex items-center justify-center gap-2 rounded-md py-2 px-3 text-xs font-semibold transition-all ${
+            className={`flex items-center justify-center gap-1.5 rounded-md py-2 px-2 text-xs font-semibold transition-all ${
               selectedRole === "nominee"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <HeartHandshake className="h-4 w-4 text-lavender" />
+            <HeartHandshake className="h-3.5 w-3.5 text-lavender" />
             Nominee
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRole("recipient");
+              setError(null);
+            }}
+            className={`flex items-center justify-center gap-1.5 rounded-md py-2 px-2 text-xs font-semibold transition-all ${
+              selectedRole === "recipient"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FolderLock className="h-3.5 w-3.5 text-cyan-400" />
+            Recipient
           </button>
         </div>
       </div>
@@ -119,7 +149,11 @@ function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="email">
-            {selectedRole === "nominee" ? "Nominee email address" : "Email address"}
+            {selectedRole === "nominee"
+              ? "Nominee email address"
+              : selectedRole === "recipient"
+              ? "Recipient email address"
+              : "Email address"}
           </Label>
           <Input
             id="email"

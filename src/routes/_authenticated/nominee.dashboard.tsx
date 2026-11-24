@@ -9,6 +9,7 @@ import {
   Download,
   FileCheck,
   FileText,
+  FolderLock,
   HeartPulse,
   Info,
   Lock,
@@ -81,7 +82,7 @@ export function NomineeDashboardPage() {
 
   // Form states for Proof of Death Evidence
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
-  const [evidenceCategory, setEvidenceCategory] = useState("DEATH_CERTIFICATE");
+  const [evidenceCategory, setEvidenceCategory] = useState("HOSPITAL_DEATH_SUMMARY");
   const [docNumber, setDocNumber] = useState("");
   const [issuingAuth, setIssuingAuth] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
@@ -157,7 +158,7 @@ export function NomineeDashboardPage() {
   const fastTrackMutation = useMutation({
     mutationFn: fastTrackApproveNomineeCase,
     onSuccess: () => {
-      toast.success("Case verified and documents unlocked for download!");
+      toast.success("Case verified and documents released to designated recipient(s)!");
       invalidateAll();
     },
     onError: (err: ApiError) => toast.error(err.message),
@@ -371,10 +372,13 @@ export function NomineeDashboardPage() {
                       value={evidenceCategory}
                       onChange={(e) => setEvidenceCategory(e.target.value)}
                     >
-                      <option value="DEATH_CERTIFICATE">Official Death Certificate</option>
-                      <option value="MEDICAL_RECORD">Medical Examiner / Hospital Report</option>
+                      <option value="HOSPITAL_DEATH_SUMMARY">Hospital Death / Discharge Summary (Fastest & Most Accessible)</option>
+                      <option value="DOCTOR_CAUSE_OF_DEATH">Doctor's Medical Certificate of Cause of Death</option>
+                      <option value="CREMATION_BURIAL_RECEIPT">Cremation / Burial / Funeral Ground Receipt</option>
+                      <option value="DEATH_CERTIFICATE">Official Government Death Certificate</option>
                       <option value="COURT_ORDER">Court Probate Order</option>
-                      <option value="SUPPORTING_DOC">Government Identity / Supporting Proof</option>
+                      <option value="MEDICAL_RECORD">Hospital / Clinical Admission Record</option>
+                      <option value="SUPPORTING_DOC">Notarized Affidavit / Supporting Proof</option>
                     </Select>
                   </div>
 
@@ -495,73 +499,73 @@ export function NomineeDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Section 3: Released Vault Documents Hub */}
+      {/* Section 3: Document Release Status to Recipients */}
       <Card className="shadow-md border-border">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Download className="h-5 w-5 text-lavender" aria-hidden />
-              Released Vault Documents
+              <FolderLock className="h-5 w-5 text-lavender" aria-hidden />
+              Recipient Document Release Status
             </CardTitle>
             <Badge variant={isApproved ? "success" : "secondary"}>
-              {isApproved ? "UNLOCKED & AVAILABLE" : "ENCRYPTED"}
+              {isApproved ? "RELEASED TO RECIPIENTS" : "PROTECTED IN VAULT"}
             </Badge>
           </div>
           <CardDescription>
             {isApproved
-              ? "The proof of death has been verified. You have full access to download the unlocked vault documents below."
-              : "Vault documents remain securely encrypted. They will automatically be unlocked once proof of death verification is approved."}
+              ? "Life-event verification confirmed. In accordance with zero-trust privacy rules, all unlocked vault documents have been released directly to the vault owner's designated recipient(s). As custodian, your verification duty is complete."
+              : "Vault documents remain securely encrypted. They will automatically unlock and release directly to the designated recipient(s) once life-event proof verification is approved."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {docsQuery.isPending ? (
             <Skeleton className="h-28 w-full" />
-          ) : releasedDocs.length > 0 ? (
+          ) : isApproved ? (
             <div className="space-y-3">
-              <p className="text-xs text-emerald-500 font-medium flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4" />
-                {releasedDocs.length} {releasedDocs.length === 1 ? "document" : "documents"} released and ready for download.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {releasedDocs.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex flex-col justify-between p-4 rounded-xl border border-border bg-secondary/40 card-hover"
-                  >
-                    <div className="space-y-1">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-emerald-100">
+                <p className="text-xs font-medium flex items-center gap-2 text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span>
+                    Verification approved. {releasedDocs.length > 0 ? `${releasedDocs.length} vault documents` : "All vault documents"} transferred to the recipient(s) dashboard. Recipient accounts can now sign in with their password to access and download the legacy files.
+                  </span>
+                </p>
+              </div>
+
+              {releasedDocs.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                  {releasedDocs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex flex-col justify-between p-4 rounded-xl border border-border bg-secondary/30"
+                    >
                       <div className="flex items-start gap-2.5">
-                        <FileText className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
-                        <div>
+                        <FileText className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate">{doc.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {doc.category || "General"} · {doc.size_bytes ? `${Math.round(doc.size_bytes / 1024)} KB` : "Document"}
                           </p>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between">
-                      <span className="text-[11px] text-muted-foreground">Status: Decrypted</span>
-                      <a
-                        href={doc.download_url || `/api/documents/${doc.id}/download`}
-                        download
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Download
-                      </a>
+                      <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Access:</span>
+                        <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px]">
+                          Available on Recipient Dashboard
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-6 text-center rounded-xl border border-dashed border-border bg-muted/20">
               <Lock className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm font-medium text-foreground">Documents currently locked</p>
+              <p className="text-sm font-medium text-foreground">Documents currently locked in vault</p>
               <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
-                Once death certificate proof is verified (or when using Fast-Track Simulator above),
-                the owner's designated documents will appear here for download.
+                Once life-event proof is verified (or when using Fast-Track Simulator above),
+                the owner's designated documents will be automatically released to their authorized recipient(s).
               </p>
             </div>
           )}

@@ -98,12 +98,29 @@ def analyze_evidence_document(
                 dob_match = False
                 discrepancies.append(f"Recorded DOB year ({year}) not explicitly confirmed in document.")
 
+    # Check Demise & Clinical Keywords (Hospital Death Summary, Cause of Death, Funeral Receipt)
+    DEMISE_KEYWORDS = [
+        "death summary", "discharge summary", "expired", "brought dead",
+        "demise", "cardiac arrest", "cause of death", "deceased",
+        "mortuary", "cremation", "burial", "funeral", "post mortem",
+        "hospital", "medical certificate", "patient name"
+    ]
+    detected_indicators = [kw for kw in DEMISE_KEYWORDS if kw in text_lower]
+
     # Calculate Confidence Score
-    confidence = 0.94 if name_match and dob_match and not discrepancies else 0.82 if name_match else 0.65
+    base_confidence = 0.94 if name_match and dob_match and not discrepancies else 0.85 if name_match else 0.70
+    if detected_indicators and name_match:
+        base_confidence = max(base_confidence, 0.96)
+
+    discrepancy_list = list(discrepancies)
+    if detected_indicators and not discrepancies:
+        discrepancy_list = [f"Verified life-event markers confirmed: {', '.join(detected_indicators[:3])}"]
+    elif not discrepancy_list:
+        discrepancy_list = ["None reported. Ready for human reviewer decision."]
 
     return OcrResult(
         name_match=name_match,
         dob_match=dob_match,
-        confidence=confidence,
-        discrepancies=discrepancies if discrepancies else ["None reported. Ready for human reviewer decision."]
+        confidence=base_confidence,
+        discrepancies=discrepancy_list
     )

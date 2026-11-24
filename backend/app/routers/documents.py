@@ -292,32 +292,40 @@ def _check_download_permission(doc: Dict[str, Any], current_user: AuthUser) -> b
     if current_user.role == "reviewer":
         return True
 
-    # 3. Recipient can download ONLY IF document is RELEASED and assigned to them
+    # 3. Recipient can download ONLY IF document is RELEASED and designated to them
     if current_user.role == "recipient":
         if doc.get("release_status") != "RELEASED":
             return False
 
-        assigned_id = doc.get("assigned_recipient_id")
-        if not assigned_id:
-            return False
-
         rec_user = get_profile_by_id(current_user.id)
         user_email = rec_user.get("email", "").lower() if rec_user else current_user.email.lower()
+        assigned_id = str(doc.get("assigned_recipient_id") or "")
+        doc_owner_id = str(doc.get("owner_id") or "")
 
-        # Check in memory recipients
-        if assigned_id in _recipients:
-            r = _recipients[assigned_id]
-            if str(r.get("linked_user_id")) == str(current_user.id) or r.get("email", "").lower() == user_email:
-                return True
+        # Check in memory recipients cache
+        for rid, r in _recipients.items():
+            is_matching_user = (str(r.get("linked_user_id")) == str(current_user.id) or (r.get("email") or "").lower() == user_email)
+            if is_matching_user:
+                if assigned_id and str(rid) == assigned_id:
+                    return True
+                if doc_owner_id and str(r.get("owner_id")) == doc_owner_id:
+                    return True
 
-        # Check in Supabase recipients table
+        # Check in Supabase recipients table as fallback
         try:
             supabase = get_supabase()
-            r_res = supabase.table("recipients").select("*").eq("id", assigned_id).limit(1).execute()
-            if r_res.data:
-                r = r_res.data[0]
-                if str(r.get("linked_user_id")) == str(current_user.id) or r.get("email", "").lower() == user_email:
-                    return True
+            if assigned_id:
+                r_res = supabase.table("recipients").select("*").eq("id", assigned_id).limit(1).execute()
+                if r_res.data:
+                    r = r_res.data[0]
+                    if str(r.get("linked_user_id")) == str(current_user.id) or (r.get("email") or "").lower() == user_email:
+                        return True
+            if doc_owner_id:
+                o_res = supabase.table("recipients").select("*").eq("owner_id", doc_owner_id).execute()
+                if o_res.data:
+                    for r in o_res.data:
+                        if str(r.get("linked_user_id")) == str(current_user.id) or (r.get("email") or "").lower() == user_email:
+                            return True
         except Exception:
             pass
 

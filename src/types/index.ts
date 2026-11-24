@@ -129,7 +129,15 @@ export interface OcrResult {
   discrepancies?: string[];
 }
 
-export type EvidenceCategory = "DEATH_CERTIFICATE" | "GOVERNMENT_ID" | "MEDICAL_RECORD" | "COURT_ORDER" | "SUPPORTING_DOC";
+export type EvidenceCategory =
+  | "HOSPITAL_DEATH_SUMMARY"
+  | "DOCTOR_CAUSE_OF_DEATH"
+  | "CREMATION_BURIAL_RECEIPT"
+  | "DEATH_CERTIFICATE"
+  | "GOVERNMENT_ID"
+  | "MEDICAL_RECORD"
+  | "COURT_ORDER"
+  | "SUPPORTING_DOC";
 
 export interface EvidenceItem {
   id: string;

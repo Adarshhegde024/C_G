@@ -55,6 +55,9 @@ interface EvidencePreviewState {
 }
 
 const CATEGORY_LABELS: Record<string, { label: string; badge: "lavender" | "navy" | "success" | "warning" | "secondary" }> = {
+  HOSPITAL_DEATH_SUMMARY: { label: "Hospital Death Summary", badge: "lavender" },
+  DOCTOR_CAUSE_OF_DEATH: { label: "Doctor's Cause of Death", badge: "warning" },
+  CREMATION_BURIAL_RECEIPT: { label: "Cremation/Burial Receipt", badge: "secondary" },
   DEATH_CERTIFICATE: { label: "Death Certificate", badge: "lavender" },
   GOVERNMENT_ID: { label: "Nominee Government ID", badge: "navy" },
   MEDICAL_RECORD: { label: "Medical Physician Record", badge: "warning" },
@@ -511,7 +514,10 @@ export function NomineeCasePage() {
                 className="mt-1"
                 disabled={isApproved}
               >
-                <option value="DEATH_CERTIFICATE">Death Certificate / Burial Permit</option>
+                <option value="HOSPITAL_DEATH_SUMMARY">Hospital Death / Discharge Summary (Fastest & Most Accessible)</option>
+                <option value="DOCTOR_CAUSE_OF_DEATH">Doctor's Medical Certificate of Cause of Death</option>
+                <option value="CREMATION_BURIAL_RECEIPT">Cremation / Burial / Funeral Ground Receipt</option>
+                <option value="DEATH_CERTIFICATE">Official Government Death Certificate</option>
                 <option value="GOVERNMENT_ID">Nominee Photo ID (Passport / License)</option>
                 <option value="MEDICAL_RECORD">Hospital / Physician Attestation</option>
                 <option value="COURT_ORDER">Court Order / Power of Attorney</option>

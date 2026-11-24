@@ -524,7 +524,7 @@ async def fast_track_approve_case(current_user: AuthUser = Depends(get_current_u
     _persist_state_to_disk()
 
     update_profile(owner_id, {"account_status": "RELEASE_READY", "updated_at": now_iso})
-    record_audit(owner_id, "DOCUMENTS_RELEASED_SIMULATION", "Case approved and documents released to nominee.", "SUCCESS")
+    record_audit(owner_id, "DOCUMENTS_RELEASED_SIMULATION", "Case approved and documents released to designated recipient(s).", "SUCCESS")
 
     return await get_nominee_case(current_user)
 
@@ -816,20 +816,35 @@ async def submit_case_evidence(
         owner_dob=owner_dob,
     )
 
+    # Check if document verified owner identity details
+    case_status = "APPROVED" if ocr_result.name_match else "AWAITING_REVIEW"
+
     # Update case status & OCR results
     update_data = {
-        "status": "AWAITING_REVIEW",
+        "status": case_status,
         "note": note.strip() if note else case_res_data.get("note"),
         "ocr_result": ocr_result.model_dump(),
         "updated_at": now_iso,
     }
+    if case_status == "APPROVED":
+        update_data["reviewed_at"] = now_iso
+
+        # Mark all owner documents as RELEASED to designated recipients
+        from app.database import _documents, _persist_state_to_disk
+        for doc in _documents.values():
+            if str(doc.get("owner_id")) == owner_id:
+                doc["release_status"] = "RELEASED"
+                doc["released_at"] = now_iso
+        _persist_state_to_disk()
+
+        update_profile(owner_id, {"account_status": "RELEASE_READY", "updated_at": now_iso})
+        record_audit(owner_id, "DOCUMENTS_RELEASED_TO_RECIPIENT", f"Verified life-event proof ({category}) uploaded by nominee {current_user.name}. Documents released to recipient(s).", "SUCCESS")
+    else:
+        update_profile(owner_id, {"account_status": "AWAITING_REVIEW"})
+        record_audit(current_user.id, "EVIDENCE_SUBMITTED", f"Submitted {category} evidence: {safe_filename}", "SUCCESS")
+
     update_legacy_case(case_id, update_data)
     case_res_data.update(update_data)
-
-    # Update vault owner account status
-    update_profile(owner_id, {"account_status": "AWAITING_REVIEW"})
-
-    record_audit(current_user.id, "EVIDENCE_SUBMITTED", f"Submitted {category} evidence: {safe_filename}", "SUCCESS")
 
     # Fetch updated evidence list
     ev_res = get_case_evidence_for_case(case_id)

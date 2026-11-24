@@ -77,6 +77,18 @@ async def login(payload: LoginPayload):
                 detail="No nominee designation found for this account. If you created a vault, please sign in as Vault Owner.",
             )
         user_role = "nominee"
+    elif payload.requested_role == "recipient":
+        from app.database import _recipients
+        is_rec = any(
+            str(r.get("linked_user_id")) == profile_id or str(r.get("email")).lower() == email
+            for r in _recipients.values()
+        )
+        if not is_rec and user_role != "recipient":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No recipient designation found for this account. If you created a vault, please sign in as Vault Owner.",
+            )
+        user_role = "recipient"
     elif payload.requested_role == "owner":
         user_role = "owner"
 

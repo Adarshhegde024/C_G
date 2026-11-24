@@ -272,7 +272,11 @@ async def accept_invitation(token: str, payload: AcceptInvitationPayload):
                 "created_at": now_iso,
             })
     elif record_table == "recipients":
-        update_recipient(str(record_id), {"status": "ACCEPTED", "accepted_at": now_iso})
+        update_recipient(str(record_id), {
+            "status": "ACCEPTED",
+            "accepted_at": now_iso,
+            "linked_user_id": profile_id,
+        })
 
     auth_user = AuthUser(
         id=profile_id,
