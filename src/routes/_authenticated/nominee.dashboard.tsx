@@ -526,38 +526,17 @@ export function NomineeDashboardPage() {
                 <p className="text-xs font-medium flex items-center gap-2 text-emerald-300">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   <span>
-                    Verification approved. {releasedDocs.length > 0 ? `${releasedDocs.length} vault documents` : "All vault documents"} transferred to the recipient(s) dashboard. Recipient accounts can now sign in with their password to access and download the legacy files.
+                    Verification approved. Vault documents transferred exclusively to the designated recipient(s) dashboard. Recipient accounts can now sign in under the Recipient tab to access and download the legacy files.
                   </span>
                 </p>
               </div>
 
-              {releasedDocs.length > 0 && (
-                <div className="grid gap-3 sm:grid-cols-2 pt-2">
-                  {releasedDocs.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex flex-col justify-between p-4 rounded-xl border border-border bg-secondary/30"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <FileText className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground truncate">{doc.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {doc.category || "General"} · {doc.size_bytes ? `${Math.round(doc.size_bytes / 1024)} KB` : "Document"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Access:</span>
-                        <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px]">
-                          Available on Recipient Dashboard
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="rounded-lg border border-border bg-muted/20 p-4 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground mb-1">Zero-Trust Custodian Privacy</p>
+                <p>
+                  As the vault nominee/custodian, your verification duty is complete. In accordance with CloudGuard's zero-knowledge security protocols, the owner's private documents are accessible exclusively to the recipient(s).
+                </p>
+              </div>
             </div>
           ) : (
             <div className="p-6 text-center rounded-xl border border-dashed border-border bg-muted/20">

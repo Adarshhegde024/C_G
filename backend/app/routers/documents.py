@@ -30,6 +30,17 @@ logger = logging.getLogger("cloudguard.documents")
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
 
+def _require_vault_active(owner_id: str):
+    """Ensures owner's vault is not frozen under Medical Hold."""
+    profile = get_profile_by_id(owner_id) or {}
+    med_hold = profile.get("medical_hold") or {}
+    if profile.get("account_status") == "MEDICAL_HOLD" or med_hold.get("active"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vault operations are suspended while under Medical Hold. Please lift the hold from your dashboard first."
+        )
+
+
 @router.get("", response_model=List[VaultDocument])
 async def list_documents(
     search: Optional[str] = None,
@@ -39,9 +50,12 @@ async def list_documents(
     Returns documents accessible to the current user.
     Owners see all their vault documents.
     Recipients see only documents explicitly released to them.
+    Nominees are custodians and cannot view vault documents.
     """
     if current_user.role == "recipient":
         raw_docs = get_released_documents_for_recipient(current_user.id, search)
+    elif current_user.role == "nominee":
+        raw_docs = []
     else:
         raw_docs = get_documents_for_owner(current_user.id, search)
 
@@ -76,6 +90,7 @@ async def upload_document(
     """
     Uploads a document to the private vault bucket and creates the encrypted metadata entry.
     """
+    _require_vault_active(current_user.id)
     file_bytes = await file.read()
     file_size = len(file_bytes)
     doc_id = str(uuid.uuid4())
@@ -153,6 +168,7 @@ async def delete_document(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Permanently deletes a document from the vault."""
+    _require_vault_active(current_user.id)
     doc = get_document_by_id(document_id)
     if doc and doc.get("local_path") and os.path.exists(doc["local_path"]):
         try:
@@ -172,6 +188,7 @@ async def assign_recipient(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Assigns or unassigns a trusted recipient for a document."""
+    _require_vault_active(current_user.id)
     clean_id = payload.recipient_id if payload.recipient_id and payload.recipient_id != "undefined" and payload.recipient_id != "" else None
 
     doc = update_document(document_id, {"assigned_recipient_id": clean_id})
@@ -211,6 +228,7 @@ async def release_document(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Releases a document so its assigned recipient can access it."""
+    _require_vault_active(current_user.id)
     now_iso = datetime.now(timezone.utc).isoformat()
     doc = update_document(document_id, {
         "release_status": "RELEASED",
@@ -249,6 +267,7 @@ async def revoke_release(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Revokes document release, returning it to private vault state."""
+    _require_vault_active(current_user.id)
     doc = update_document(document_id, {
         "release_status": "NOT_RELEASED",
         "released_at": None
@@ -329,16 +348,8 @@ def _check_download_permission(doc: Dict[str, Any], current_user: AuthUser) -> b
         except Exception:
             pass
 
-    # 4. Designated nominee can download if documents are RELEASED
-    if doc.get("release_status") == "RELEASED":
-        from app.database import get_nominee_for_owner
-        nom = get_nominee_for_owner(str(doc.get("owner_id")))
-        if nom:
-            nom_email = (nom.get("email") or "").lower()
-            nom_linked = str(nom.get("linked_user_id") or "")
-            if nom_linked == str(current_user.id) or nom_email == current_user.email.lower():
-                return True
-
+    # Note: Nominees are custodians and cannot download vault documents.
+    # Documents are strictly released to designated recipients.
     return False
 
 

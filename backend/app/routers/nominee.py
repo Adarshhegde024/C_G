@@ -463,32 +463,10 @@ async def toggle_nominee_medical_hold(
 @router.get("/documents")
 async def get_nominee_released_documents(current_user: AuthUser = Depends(get_current_user)):
     """
-    Returns released vault documents accessible to the nominee once proof has been verified.
+    Nominees act strictly as custodians/verifiers. Documents are released exclusively
+    to designated recipients, not nominees. Returns an empty list.
     """
-    nominee_rec = get_nominee_for_user(current_user.id, current_user.email)
-    if not nominee_rec:
-        raise HTTPException(status_code=404, detail="No linked vault found.")
-
-    owner_id = nominee_rec["owner_id"]
-    case_data = get_legacy_case_for_nominee(nominee_rec["id"])
-    owner_docs = get_documents_for_owner(owner_id)
-
-    # Documents are accessible if case is APPROVED or released by owner
-    is_approved = bool(case_data and case_data.get("status") == "APPROVED")
-    released = []
-    for d in owner_docs:
-        if is_approved or d.get("release_status") == "RELEASED":
-            released.append({
-                "id": str(d["id"]),
-                "name": d["name"],
-                "file_type": d.get("file_type", "document"),
-                "category": d.get("category", "General"),
-                "size_bytes": d.get("size_bytes", 0),
-                "encryption_status": d.get("encryption_status", "DECRYPTED"),
-                "released_at": d.get("released_at") or datetime.now(timezone.utc).isoformat(),
-                "download_url": f"/api/documents/{d['id']}/download",
-            })
-    return released
+    return []
 
 
 @router.post("/case/fast-track-approve", response_model=NomineeCase)
@@ -592,21 +570,8 @@ async def get_nominee_case(current_user: AuthUser = Depends(get_current_user)):
     if case_data.get("status") in ["EVIDENCE_SUBMITTED", "AWAITING_REVIEW"]:
         audit_history.append({"timestamp": datetime.now(timezone.utc).isoformat(), "event": "EVIDENCE_UPLOADED", "description": "Nominee submitted evidence"})
 
-    # Released documents if approved
+    # Documents are released strictly to recipients, not the nominee
     released_docs = []
-    if case_data.get("status") == "APPROVED":
-        from app.database import get_documents_for_owner
-        owner_docs = get_documents_for_owner(owner_id)
-        for d in owner_docs:
-            if d.get("release_status") == "RELEASED":
-                released_docs.append({
-                    "id": str(d["id"]),
-                    "name": d["name"],
-                    "file_type": d.get("file_type", "document"),
-                    "size_bytes": d.get("size_bytes", 0),
-                    "released_at": d.get("released_at"),
-                    "download_url": f"/api/documents/{d['id']}/download",
-                })
 
     return NomineeCase(
         id=case_id,
